@@ -396,12 +396,12 @@ function startApp() {
   setTimeout(() => sendAction('get_system_info'), 1200);
   setInterval(() => sendAction('get_system_info'), 3500);
 
-  // Auto-connect GameLoop on startup if Easy Mode is active
-  if (EasyModeState.enabled) {
-    setTimeout(() => {
-      autoConnectGameLoop();
-    }, 1000);
-  }
+  // Check and ensure GameLoop ADB settings on startup:
+  // In Easy Mode: enables ADB if disabled, then launches emulator/game.
+  // In Advanced Mode: enables ADB if disabled, does NOT launch emulator.
+  setTimeout(() => {
+    sendAction('startup_check_adb', { isEasyMode: EasyModeState.enabled ? 1 : 0 });
+  }, 500);
 }
 
 function licenseRemainingText(lic) {
@@ -1090,6 +1090,13 @@ function handleNativeMessage(data) {
             if (chk) chk.checked = (msg[`hook${id}`] === 1 || msg[`hook${id}`] === true);
           }
         });
+    } else if (action === 'gameloop_adb_status') {
+      if (msg.wasAlreadyEnabled === false) {
+        showToast(Lang.current === 'ar'
+          ? 'تم تفعيل وضع تصحيح أخطاء ADB في محاكي GameLoop تلقائياً!'
+          : 'GameLoop ADB debugging has been automatically enabled!', 'success');
+        const chk308 = document.getElementById('chk-308');
+        if (chk308) chk308.checked = true;
       }
     } else if (action === 'adb_status') {
       handleAdbStatus(msg);
