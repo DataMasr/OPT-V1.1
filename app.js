@@ -1235,6 +1235,8 @@ function handleNativeMessage(data) {
       handleDisplayResult(msg);
     } else if (action === 'display_restore_result') {
       handleDisplayRestoreResult(msg);
+    } else if (action === 'gpu_panel_result') {
+      handleGpuPanelResult(msg);
     } else if (action === 'pc_check') {
       handlePcCheck(msg);
     } else if (action === 'paks_info') {
@@ -1696,6 +1698,14 @@ function handleDisplayRestoreResult(msg) {
     showToast(msg.message || t('dres.restoredSuccess'), 'success');
   } else {
     showToast(msg.message || 'Failed to restore display', 'error');
+  }
+}
+
+function handleGpuPanelResult(msg) {
+  if (msg.ok) {
+    showToast(msg.message || `Opened ${msg.vendor || 'GPU'} Control Panel.`, 'info');
+  } else {
+    showToast(msg.message || 'Could not open GPU Control Panel.', 'error');
   }
 }
 
@@ -3032,6 +3042,11 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('dres-btn-restore')?.addEventListener('click', () => {
     SoundEngine.playClick();
     sendAction('restore_display_res');
+  });
+
+  document.getElementById('dres-btn-open-gpu')?.addEventListener('click', () => {
+    SoundEngine.playClick();
+    sendAction('open_gpu_panel');
   });
 
   renderHzSelector();

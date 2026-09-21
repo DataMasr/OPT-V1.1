@@ -1702,6 +1702,20 @@
             </div>
           </div>
 
+          <!-- Custom Resolution Driver Notice -->
+          <div class="dres-gpu-tip">
+            <div class="dres-gpu-tip-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="16" x2="12" y2="12"></line>
+                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+              </svg>
+            </div>
+            <div class="dres-gpu-tip-text">
+              <span data-i18n="dres.gpuTip">If your monitor doesn't show custom 4:3 resolutions (like 1440×1080), click "Open GPU Control Panel" to create it once in your NVIDIA / AMD / Intel driver, then CyperOpt will apply it instantly.</span>
+            </div>
+          </div>
+
           <!-- Bottom Action Buttons Bar -->
           <div class="dres-actions-bar">
             <button type="button" class="btn-secondary-action dres-btn-restore" id="dres-btn-restore">
@@ -1711,6 +1725,17 @@
                 <path d="M3 3v5h5"></path>
               </svg>
               <span data-i18n="dres.restore">Restore Original Resolution</span>
+            </button>
+
+            <button type="button" class="btn-secondary-action dres-btn-gpu" id="dres-btn-open-gpu">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round">
+                <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
+                <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
+                <line x1="6" y1="6" x2="6.01" y2="6"></line>
+                <line x1="6" y1="18" x2="6.01" y2="18"></line>
+              </svg>
+              <span data-i18n="dres.openGpu">Open GPU Control Panel</span>
             </button>
 
             <button type="button" class="btn-primary-action dres-btn-apply" id="dres-btn-apply">
