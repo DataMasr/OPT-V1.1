@@ -175,6 +175,36 @@
           </button>
           <button type="button" class="auth-update" id="auth-update" hidden data-i18n="auth.update">Download the new
             version</button>
+
+          <div class="auth-update-box" id="auth-update-box" hidden>
+            <div class="auth-update-header">
+              <div class="auth-update-icon-wrapper">
+                <svg class="auth-update-spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
+                </svg>
+                <svg class="auth-update-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="7 10 12 15 17 10"></polyline>
+                  <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+              </div>
+              <div class="auth-update-info">
+                <h4 class="auth-update-title" id="auth-update-title" data-i18n="auth.updateTitle">New Update Available</h4>
+                <p class="auth-update-status" id="auth-update-status" data-i18n="auth.updateDownloading">Downloading the new version automatically...</p>
+              </div>
+            </div>
+            <div class="auth-update-progress-bar">
+              <div class="auth-update-progress-fill" id="auth-update-progress-fill" style="width: 0%;"></div>
+            </div>
+            <div class="auth-update-meta">
+              <span class="auth-update-size" id="auth-update-size">0 MB / 0 MB</span>
+              <span class="auth-update-percent" id="auth-update-percent">0%</span>
+            </div>
+            <div class="auth-update-actions" id="auth-update-actions" hidden>
+              <button type="button" class="btn-update-retry" id="btn-update-retry" data-i18n="auth.updateRetry">Retry</button>
+              <button type="button" class="btn-update-browser" id="btn-update-browser" data-i18n="auth.updateManual">Download in Browser</button>
+            </div>
+          </div>
         </form>
       </div>
 

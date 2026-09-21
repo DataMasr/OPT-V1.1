@@ -359,6 +359,120 @@ function handleAuthResult(msg) {
   renderAuth();
   shakeAuthPanel();
   focusAuthInput();
+
+  if (msg.code === 'version') {
+    ensureAuthUpdateBox();
+    handleUpdateProgress({ status: 'downloading', percent: 0, downloaded: 0, total: 0 });
+  }
+}
+
+function ensureAuthUpdateBox() {
+  let box = document.getElementById('auth-update-box');
+  if (box) return box;
+
+  const form = document.getElementById('auth-form');
+  if (!form) return null;
+
+  box = document.createElement('div');
+  box.className = 'auth-update-box';
+  box.id = 'auth-update-box';
+  box.innerHTML = `
+    <div class="auth-update-header">
+      <div class="auth-update-icon-wrapper">
+        <svg class="auth-update-spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
+        </svg>
+        <svg class="auth-update-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="7 10 12 15 17 10"></polyline>
+          <line x1="12" y1="15" x2="12" y2="3"></line>
+        </svg>
+      </div>
+      <div class="auth-update-info">
+        <h4 class="auth-update-title" id="auth-update-title">${t('auth.updateTitle')}</h4>
+        <p class="auth-update-status" id="auth-update-status">${t('auth.updateDownloading')}</p>
+      </div>
+    </div>
+    <div class="auth-update-progress-bar">
+      <div class="auth-update-progress-fill" id="auth-update-progress-fill" style="width: 0%;"></div>
+    </div>
+    <div class="auth-update-meta">
+      <span class="auth-update-size" id="auth-update-size">0 MB / 0 MB</span>
+      <span class="auth-update-percent" id="auth-update-percent">0%</span>
+    </div>
+    <div class="auth-update-actions" id="auth-update-actions" hidden>
+      <button type="button" class="btn-update-retry" id="btn-update-retry">${t('auth.updateRetry')}</button>
+      <button type="button" class="btn-update-browser" id="btn-update-browser">${t('auth.updateManual')}</button>
+    </div>
+  `;
+  form.appendChild(box);
+
+  document.getElementById('btn-update-retry')?.addEventListener('click', () => {
+    sendAction('auth_retry_update');
+    handleUpdateProgress({ status: 'downloading', percent: 0, downloaded: 0, total: 0 });
+  });
+
+  document.getElementById('btn-update-browser')?.addEventListener('click', () => {
+    sendAction('auth_open_download');
+  });
+
+  return box;
+}
+
+function handleUpdateProgress(msg) {
+  const box = ensureAuthUpdateBox();
+  if (!box) return;
+
+  box.hidden = false;
+
+  // Lock auth controls
+  ['auth-key', 'auth-paste', 'auth-remember', 'auth-submit', 'auth-update'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.disabled = true;
+      if (id === 'auth-update' || id === 'auth-submit') el.hidden = true;
+    }
+  });
+
+  const fill = document.getElementById('auth-update-progress-fill');
+  const percentText = document.getElementById('auth-update-percent');
+  const sizeText = document.getElementById('auth-update-size');
+  const statusText = document.getElementById('auth-update-status');
+  const titleText = document.getElementById('auth-update-title');
+  const actions = document.getElementById('auth-update-actions');
+  const spinner = box.querySelector('.auth-update-spinner');
+
+  if (titleText) titleText.textContent = t('auth.updateTitle');
+
+  if (msg.status === 'downloading') {
+    if (actions) actions.hidden = true;
+    if (spinner) spinner.style.display = '';
+
+    const percent = Math.max(0, Math.min(100, Number(msg.percent) || 0));
+    if (fill) fill.style.width = percent + '%';
+    if (percentText) percentText.textContent = percent + '%';
+
+    const downloadedMB = ((Number(msg.downloaded) || 0) / (1024 * 1024)).toFixed(1);
+    const totalMB = ((Number(msg.total) || 0) / (1024 * 1024)).toFixed(1);
+    if (sizeText) {
+      sizeText.textContent = (Number(msg.total) > 0)
+        ? `${downloadedMB} MB / ${totalMB} MB`
+        : `${downloadedMB} MB`;
+    }
+
+    if (statusText) statusText.textContent = t('auth.updateDownloading');
+  } else if (msg.status === 'installing') {
+    if (actions) actions.hidden = true;
+    if (spinner) spinner.style.display = '';
+    if (fill) fill.style.width = '100%';
+    if (percentText) percentText.textContent = '100%';
+    if (statusText) statusText.textContent = t('auth.updateInstalling');
+  } else if (msg.status === 'error') {
+    if (spinner) spinner.style.display = 'none';
+    if (actions) actions.hidden = false;
+    if (statusText) statusText.textContent = msg.message || t('auth.updateFailed');
+    showToast(msg.message || t('auth.updateFailed'), 'error');
+  }
 }
 
 function unlockApp() {
@@ -1056,6 +1170,10 @@ function handleNativeMessage(data) {
       handleAuthResult(msg);
       return;
     }
+    if (action === 'update_progress') {
+      handleUpdateProgress(msg);
+      return;
+    }
     if (!Auth.unlocked) return;
 
     if (action === 'system_info') {
@@ -1092,77 +1210,77 @@ function handleNativeMessage(data) {
         });
       }
     } else if (action === 'gameloop_adb_status') {
-        if (msg.wasAlreadyEnabled === false) {
-          showToast(Lang.current === 'ar'
-            ? 'تم تفعيل وضع تصحيح أخطاء ADB في محاكي GameLoop تلقائياً!'
-            : 'GameLoop ADB debugging has been automatically enabled!', 'success');
-          const chk308 = document.getElementById('chk-308');
-          if (chk308) chk308.checked = true;
+      if (msg.wasAlreadyEnabled === false) {
+        showToast(Lang.current === 'ar'
+          ? 'تم تفعيل وضع تصحيح أخطاء ADB في محاكي GameLoop تلقائياً!'
+          : 'GameLoop ADB debugging has been automatically enabled!', 'success');
+        const chk308 = document.getElementById('chk-308');
+        if (chk308) chk308.checked = true;
+      }
+    } else if (action === 'adb_status') {
+      handleAdbStatus(msg);
+    } else if (action === 'game_graphics') {
+      handleGameGraphics(msg);
+    } else if (action === 'boost_status') {
+      handleBoostStatus(msg);
+    } else if (action === 'tweaks_status') {
+      handleTweaksStatus(msg);
+    } else if (action === 'tweak_result') {
+      handleTweakResult(msg);
+    } else if (action === 'resolution_info') {
+      handleResolutionInfo(msg);
+    } else if (action === 'display_info') {
+      handleDisplayInfo(msg);
+    } else if (action === 'display_result') {
+      handleDisplayResult(msg);
+    } else if (action === 'display_restore_result') {
+      handleDisplayRestoreResult(msg);
+    } else if (action === 'pc_check') {
+      handlePcCheck(msg);
+    } else if (action === 'paks_info') {
+      handlePaksInfo(msg);
+    } else if (action === 'paks_status') {
+      handlePaksStatus(msg);
+    } else if (action === 'modskin_status') {
+      handleModSkinStatus(msg);
+    } else if (action === 'twitter_status') {
+      handleTwitterStatus(msg);
+    } else if (action === 'hosts_fix_status') {
+      handleHostsFixStatus(msg);
+    } else if (action === 'hosts_fix_result') {
+      handleHostsFixResult(msg);
+    } else if (action === 'gfx_log') {
+      appendGfxLog(msg.tag || "ADB", msg.text || "");
+    } else if (action === 'apply_gfx' || action === 'kill_emulator' || action === 'reset_guest') {
+      const type = toastTypeFor(msg);
+      showToast(msg.message || t('common.done'), type);
+      appendGfxLog(type === 'error' ? 'ERROR' : type === 'info' ? 'INFO' : 'SUCCESS', msg.message || '');
+      if (action === 'reset_guest') {
+        const isSuccess = msg.status === 'success';
+        EasyActionModal.complete(isSuccess, msg.message || (isSuccess ? t('common.done') : 'Failed'));
+        const btn = document.getElementById('btn-reset-guest');
+        if (btn) {
+          btn.disabled = Bridge.state !== 'connected';
+          btn.classList.remove('is-busy');
         }
-      } else if (action === 'adb_status') {
-        handleAdbStatus(msg);
-      } else if (action === 'game_graphics') {
-        handleGameGraphics(msg);
-      } else if (action === 'boost_status') {
-        handleBoostStatus(msg);
-      } else if (action === 'tweaks_status') {
-        handleTweaksStatus(msg);
-      } else if (action === 'tweak_result') {
-        handleTweakResult(msg);
-      } else if (action === 'resolution_info') {
-        handleResolutionInfo(msg);
-      } else if (action === 'display_info') {
-        handleDisplayInfo(msg);
-      } else if (action === 'display_result') {
-        handleDisplayResult(msg);
-      } else if (action === 'display_restore_result') {
-        handleDisplayRestoreResult(msg);
-      } else if (action === 'pc_check') {
-        handlePcCheck(msg);
-      } else if (action === 'paks_info') {
-        handlePaksInfo(msg);
-      } else if (action === 'paks_status') {
-        handlePaksStatus(msg);
-      } else if (action === 'modskin_status') {
-        handleModSkinStatus(msg);
-      } else if (action === 'twitter_status') {
-        handleTwitterStatus(msg);
-      } else if (action === 'hosts_fix_status') {
-        handleHostsFixStatus(msg);
-      } else if (action === 'hosts_fix_result') {
-        handleHostsFixResult(msg);
-      } else if (action === 'gfx_log') {
-        appendGfxLog(msg.tag || "ADB", msg.text || "");
-      } else if (action === 'apply_gfx' || action === 'kill_emulator' || action === 'reset_guest') {
-        const type = toastTypeFor(msg);
-        showToast(msg.message || t('common.done'), type);
-        appendGfxLog(type === 'error' ? 'ERROR' : type === 'info' ? 'INFO' : 'SUCCESS', msg.message || '');
-        if (action === 'reset_guest') {
-          const isSuccess = msg.status === 'success';
-          EasyActionModal.complete(isSuccess, msg.message || (isSuccess ? t('common.done') : 'Failed'));
-          const btn = document.getElementById('btn-reset-guest');
-          if (btn) {
-            btn.disabled = Bridge.state !== 'connected';
-            btn.classList.remove('is-busy');
-          }
-          const btnEasy = document.getElementById('btn-easy-reset-guest');
-          if (btnEasy) {
-            btnEasy.classList.remove('is-busy');
-          }
-        }
-      } else if (action === 'action_result') {
-        showToast(msg.message || t('common.actionDone'), toastTypeFor(msg));
-        if (msg.gfx_log) appendGfxLog("SYSTEM", msg.gfx_log);
-      } else if (msg.message) {
-        showToast(msg.message, toastTypeFor(msg));
-        if (action === 'clean_ram' || action === 'turbo_boost') {
-          setTimeout(() => sendAction('get_system_info'), 400);
+        const btnEasy = document.getElementById('btn-easy-reset-guest');
+        if (btnEasy) {
+          btnEasy.classList.remove('is-busy');
         }
       }
-    } catch (err) {
-      console.error("[IPC Parse Error]", err);
+    } else if (action === 'action_result') {
+      showToast(msg.message || t('common.actionDone'), toastTypeFor(msg));
+      if (msg.gfx_log) appendGfxLog("SYSTEM", msg.gfx_log);
+    } else if (msg.message) {
+      showToast(msg.message, toastTypeFor(msg));
+      if (action === 'clean_ram' || action === 'turbo_boost') {
+        setTimeout(() => sendAction('get_system_info'), 400);
+      }
     }
+  } catch (err) {
+    console.error("[IPC Parse Error]", err);
   }
+}
 
 // ----------------------------------------------------------
 // Performance tweak toggles (System Optimizer)
@@ -1170,1881 +1288,1888 @@ function handleNativeMessage(data) {
 // ----------------------------------------------------------
 const TweakState = { pending: new Set(), elevated: true, info: {} };
 
-  function renderTweakRow(id, info) {
-    const row = document.querySelector(`.tweak-toggle-row[data-tweak="${id}"]`);
-    const input = document.querySelector(`input[data-tweak-toggle="${id}"]`);
-    if (!row || !input) return;
-    TweakState.info[id] = info;
+function renderTweakRow(id, info) {
+  const row = document.querySelector(`.tweak-toggle-row[data-tweak="${id}"]`);
+  const input = document.querySelector(`input[data-tweak-toggle="${id}"]`);
+  if (!row || !input) return;
+  TweakState.info[id] = info;
 
-    input.checked = !!info.applied;
-    const locked = !info.available || (info.needsAdmin && !TweakState.elevated);
-    input.disabled = locked;
-    row.classList.toggle('is-on', !!info.applied);
-    row.classList.toggle('is-unavailable', locked);
-    row.classList.toggle('is-pending', TweakState.pending.has(id));
+  input.checked = !!info.applied;
+  const locked = !info.available || (info.needsAdmin && !TweakState.elevated);
+  input.disabled = locked;
+  row.classList.toggle('is-on', !!info.applied);
+  row.classList.toggle('is-unavailable', locked);
+  row.classList.toggle('is-pending', TweakState.pending.has(id));
 
-    const tag = row.querySelector('.tweak-state-tag');
-    if (tag) {
-      tag.hidden = !locked;
-      tag.textContent = !info.available ? t('tw.state.na') : t('tw.state.admin');
+  const tag = row.querySelector('.tweak-state-tag');
+  if (tag) {
+    tag.hidden = !locked;
+    tag.textContent = !info.available ? t('tw.state.na') : t('tw.state.admin');
+  }
+}
+
+function handleTweaksStatus(msg) {
+  TweakState.elevated = msg.elevated !== false;
+  Object.entries(msg.tweaks || {}).forEach(([id, info]) => renderTweakRow(id, info));
+}
+
+function handleTweakResult(msg) {
+  TweakState.pending.delete(msg.id);
+  renderTweakRow(msg.id, { applied: msg.applied, available: true, needsAdmin: false });
+  showToast(msg.message || (msg.ok ? t('common.done') : t('common.failed')), msg.ok ? 'success' : 'error');
+}
+
+function requestTweak(id, enable) {
+  if (TweakState.pending.has(id)) return;
+  TweakState.pending.add(id);
+  const row = document.querySelector(`.tweak-toggle-row[data-tweak="${id}"]`);
+  if (row) row.classList.add('is-pending');
+  sendAction('set_tweak', { id, enable: enable ? 1 : 0 });
+}
+
+// ----------------------------------------------------------
+// Resolution page
+// ----------------------------------------------------------
+const RES_PRESETS = [
+  { id: 'hd169', cat: 'standard', w: 1280, h: 720 },
+  { id: 'fhd169', cat: 'standard', w: 1920, h: 1080 },
+  { id: 'qhd169', cat: 'standard', w: 2560, h: 1440 },
+  { id: 'wide1610', cat: 'standard', w: 1720, h: 1080 },
+  { id: 'lowTall', cat: 'tall', w: 1280, h: 1080 },
+  { id: 'classic43', cat: '43', w: 1440, h: 1080 },
+  { id: 'sharp43', cat: '43', w: 1920, h: 1440 },
+  { id: 'native43', cat: '43', w: 2880, h: 2160 },
+  { id: 'ipadSquare', cat: 'ipad', w: 2300, h: 1920 },
+  { id: 'ipadPro', cat: 'ipad', w: 2200, h: 2180 },
+  { id: 'uwTall', cat: 'tall', w: 1920, h: 1800 },
+  { id: 'uwMax', cat: 'tall', w: 1920, h: 1900 }
+];
+
+const ResState = { width: 0, height: 0, dpi: 0, emulatorRunning: false, restartNeeded: false, restarting: false, saved: [] };
+
+function aspectLabel(w, h) {
+  if (!w || !h) return '--';
+  const r = w / h;
+  const known = [[16 / 9, '16:9'], [16 / 10, '16:10'], [4 / 3, '4:3'], [5 / 4, '5:4'], [1, '1:1']];
+  for (const [value, label] of known) if (Math.abs(r - value) < 0.012) return label;
+  return `${r.toFixed(2)}:1`;
+}
+
+const isHeavy = (w, h) => w * h >= 4000000;
+
+const ARROW_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"></path></svg>';
+
+function renderResolutionPage() {
+  const { width, height, dpi } = ResState;
+  const known = width > 0 && height > 0;
+
+  const value = document.getElementById('res-current-value');
+  if (value) value.textContent = known ? `${width} × ${height}` : t('res.unknown');
+  const aspect = document.getElementById('res-current-aspect');
+  if (aspect) aspect.textContent = known ? aspectLabel(width, height) : '--';
+  const dpiEl = document.getElementById('res-current-dpi');
+  if (dpiEl) dpiEl.textContent = dpi ? `DPI ${dpi}` : 'DPI --';
+  const emu = document.getElementById('res-emulator-state');
+  if (emu) {
+    emu.textContent = ResState.emulatorRunning ? t('res.glRunning') : t('res.glClosed');
+    emu.classList.toggle('is-on', ResState.emulatorRunning);
+  }
+
+  const banner = document.getElementById('res-restart-banner');
+  if (banner) banner.hidden = !(ResState.restartNeeded && ResState.emulatorRunning) && !ResState.restarting;
+  const restartBtn = document.getElementById('btn-res-restart');
+  if (restartBtn) {
+    restartBtn.disabled = ResState.restarting;
+    restartBtn.textContent = ResState.restarting ? t('res.restarting') : t('res.restart');
+  }
+
+  // Presets
+  const grid = document.getElementById('res-preset-grid');
+  if (grid) {
+    grid.innerHTML = '';
+    RES_PRESETS.forEach(p => {
+      const current = p.w === width && p.h === height;
+      const card = document.createElement('div');
+      card.className = `res-preset${current ? ' is-current' : ''}`;
+
+      const head = document.createElement('div');
+      head.className = 'res-preset-head';
+      const name = document.createElement('span');
+      name.className = 'res-preset-name';
+      name.textContent = t(`res.p.${p.id}`);
+      const size = document.createElement('span');
+      size.className = 'res-preset-size';
+      size.textContent = `${p.w}×${p.h}`;
+      head.append(name, size);
+
+      const cat = document.createElement('div');
+      cat.className = 'res-preset-cat';
+      cat.textContent = `${t(`res.cat.${p.cat}`)} · ${aspectLabel(p.w, p.h)}`;
+      if (current) cat.append(makeResTag(t('res.tag.current'), 'is-current'));
+      if (isHeavy(p.w, p.h)) cat.append(makeResTag(t('res.tag.heavy'), 'is-heavy'));
+
+      const desc = document.createElement('div');
+      desc.className = 'res-preset-desc';
+      desc.textContent = t(`res.p.${p.id}.desc`);
+
+      const btn = document.createElement('button');
+      btn.className = 'btn-module-action';
+      btn.type = 'button';
+      btn.disabled = current;
+      const label = document.createElement('span');
+      label.textContent = current ? t('res.active') : t('res.apply');
+      btn.append(label);
+      btn.insertAdjacentHTML('beforeend', ARROW_ICON);
+      btn.addEventListener('click', () => {
+        SoundEngine.playClick();
+        sendAction('set_resolution', { width: p.w, height: p.h, dpi: 0 });
+      });
+
+      card.append(head, cat, desc, btn);
+      grid.appendChild(card);
+    });
+  }
+}
+
+function makeResTag(text, cls) {
+  const tag = document.createElement('span');
+  tag.className = `res-tag ${cls || ''}`;
+  tag.textContent = text;
+  return tag;
+}
+
+function renderSavedResolutions() {
+  const list = document.getElementById('res-saved-list');
+  if (!list) return;
+  const saved = ResState.saved;
+  list.innerHTML = '';
+
+  if (!saved.length) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-state';
+    empty.textContent = t('res.emptySaved');
+    list.appendChild(empty);
+    return;
+  }
+
+  saved.forEach(r => {
+    const current = r.width === ResState.width && r.height === ResState.height && (!r.dpi || r.dpi === ResState.dpi);
+    const item = document.createElement('div');
+    item.className = `res-saved-item${current ? ' is-current' : ''}`;
+
+    const info = document.createElement('div');
+    info.className = 'res-saved-info';
+    const title = document.createElement('div');
+    title.className = 'res-saved-title';
+    const size = document.createElement('span');
+    size.className = 'ltr-text';
+    size.textContent = `${r.width} × ${r.height}`;
+    title.append(size);
+    if (r.note === 'Original') title.append(makeResTag(t('res.tag.original'), 'is-original'));
+    if (current) title.append(makeResTag(t('res.tag.current'), 'is-current'));
+    const sub = document.createElement('div');
+    sub.className = 'res-saved-sub';
+    sub.textContent = `${aspectLabel(r.width, r.height)} · DPI ${r.dpi || '--'} · ${r.date}`;
+    info.append(title, sub);
+
+    const restore = document.createElement('button');
+    restore.className = 'btn-res-small';
+    restore.type = 'button';
+    restore.textContent = current ? t('res.active') : t('res.restore');
+    restore.disabled = current;
+    restore.addEventListener('click', () => {
+      SoundEngine.playClick();
+      sendAction('restore_resolution', { id: r.id });
+    });
+
+    const del = document.createElement('button');
+    del.className = 'btn-res-small is-danger';
+    del.type = 'button';
+    del.textContent = t('res.delete');
+    del.addEventListener('click', () => {
+      if (r.note === 'Original' && !confirm(t('res.confirmDeleteOriginal'))) return;
+      SoundEngine.playClick();
+      sendAction('delete_resolution', { id: r.id });
+    });
+
+    item.append(info, restore, del);
+    list.appendChild(item);
+  });
+}
+
+function handleResolutionInfo(msg) {
+  ResState.width = msg.width || 0;
+  ResState.height = msg.height || 0;
+  ResState.dpi = msg.dpi || 0;
+  ResState.emulatorRunning = !!msg.emulatorRunning;
+  ResState.saved = msg.saved || [];
+  if (msg.restartNeeded) ResState.restartNeeded = true;
+  if (msg.status) ResState.restarting = false;
+  if (msg.message && msg.message.startsWith('GameLoop restarted')) ResState.restartNeeded = false;
+
+  renderResolutionPage();
+  renderSavedResolutions();
+
+  if (msg.message) {
+    showToast(msg.message, msg.status === 'error' ? 'error' : msg.status === 'info' ? 'info' : 'success');
+  }
+}
+
+// ----------------------------------------------------------
+// Display Resolution & Stretched iPad View
+// ----------------------------------------------------------
+const DisplayResState = {
+  currentWidth: 0,
+  currentHeight: 0,
+  currentHz: 0,
+  nativeWidth: 0,
+  nativeHeight: 0,
+  nativeHz: 0,
+  supportedHz: [59, 60, 72, 75, 120, 144, 165, 180, 200, 240, 360],
+  selectedWidth: 1440,
+  selectedHeight: 1080,
+  selectedHz: 144,
+  usePreferredHz: true,
+  favorite: null
+};
+
+function gcd(a, b) {
+  a = Math.abs(Math.round(a));
+  b = Math.abs(Math.round(b));
+  while (b) {
+    const t = b;
+    b = a % b;
+    a = t;
+  }
+  return a || 1;
+}
+
+function calculateAspectRatio(w, h) {
+  if (!w || !h) return { text: '--', badge: '', isIpad: false, ratio: 1 };
+  const r = w / h;
+  const d = gcd(w, h);
+  const rw = Math.round(w / d);
+  const rh = Math.round(h / d);
+
+  let isIpad = false;
+  let badge = '';
+
+  if (Math.abs(r - 4 / 3) < 0.02) {
+    badge = '4:3 ' + t('dres.tag.ipad');
+    isIpad = true;
+  } else if (Math.abs(r - 16 / 10) < 0.02 || Math.abs(r - 8 / 5) < 0.02) {
+    badge = '16:10 ' + t('dres.tag.balanced');
+    isIpad = true;
+  } else if (Math.abs(r - 5 / 4) < 0.02) {
+    badge = '5:4 ' + t('dres.tag.stretched');
+    isIpad = true;
+  } else if (Math.abs(r - 16 / 9) < 0.02) {
+    badge = '16:9 ' + t('dres.tag.native');
+  } else {
+    badge = `${rw}:${rh}`;
+  }
+
+  let text = `${rw}:${rh}`;
+  if (Math.abs(r - 4 / 3) < 0.005) text = '4:3';
+  else if (Math.abs(r - 16 / 10) < 0.005) text = '16:10';
+  else if (Math.abs(r - 16 / 9) < 0.005) text = '16:9';
+  else if (Math.abs(r - 5 / 4) < 0.005) text = '5:4';
+
+  return { text, badge, isIpad, ratio: r };
+}
+
+function updateDisplayResUI() {
+  const w = DisplayResState.selectedWidth || 1440;
+  const h = DisplayResState.selectedHeight || 1080;
+  const hz = DisplayResState.selectedHz || 60;
+
+  // Inputs
+  const inW = document.getElementById('dres-input-w');
+  const inH = document.getElementById('dres-input-h');
+  if (inW && parseInt(inW.value, 10) !== w) inW.value = w;
+  if (inH && parseInt(inH.value, 10) !== h) inH.value = h;
+
+  // Aspect ratio calculation
+  const ar = calculateAspectRatio(w, h);
+  const ratioText = document.getElementById('dres-ratio-text');
+  const ratioBadge = document.getElementById('dres-ratio-badge');
+  if (ratioText) ratioText.textContent = ar.text;
+  if (ratioBadge) {
+    ratioBadge.textContent = ar.badge;
+    ratioBadge.classList.toggle('is-ipad', ar.isIpad);
+  }
+
+  // Monitor preview
+  const screen = document.getElementById('dres-monitor-screen');
+  const hudRes = document.getElementById('dres-hud-res');
+  const hudHz = document.getElementById('dres-hud-hz');
+  if (screen) {
+    screen.style.aspectRatio = `${w} / ${h}`;
+  }
+  if (hudRes) hudRes.textContent = `${w} × ${h}`;
+  if (hudHz) hudHz.textContent = `${hz} Hz`;
+
+  // Quick chips active state
+  document.querySelectorAll('.dres-chip[data-set-w]').forEach(chip => {
+    chip.classList.toggle('active', parseInt(chip.dataset.setW, 10) === w);
+  });
+  document.querySelectorAll('.dres-chip[data-set-h]').forEach(chip => {
+    chip.classList.toggle('active', parseInt(chip.dataset.setH, 10) === h);
+  });
+
+  // Presets cards active state
+  document.querySelectorAll('.dres-preset-card').forEach(card => {
+    const pw = parseInt(card.dataset.pw, 10);
+    const ph = parseInt(card.dataset.ph, 10);
+    card.classList.toggle('is-active', pw === w && ph === h);
+  });
+
+  // Telemetry status bar
+  const statusPreview = document.getElementById('dres-status-preview');
+  const statusHz = document.getElementById('dres-status-hz');
+  const statusRatio = document.getElementById('dres-status-ratio');
+  const statusCurrent = document.getElementById('dres-status-current');
+
+  if (statusPreview) statusPreview.textContent = `${w} × ${h}`;
+  if (statusHz) statusHz.textContent = `${hz} Hz`;
+  if (statusRatio) statusRatio.textContent = ar.text;
+  if (statusCurrent) {
+    const curW = DisplayResState.currentWidth;
+    const curH = DisplayResState.currentHeight;
+    const curHz = DisplayResState.currentHz;
+    statusCurrent.textContent = curW > 0 ? `${curW} × ${curH} @ ${curHz}Hz` : '-- × -- @ --Hz';
+  }
+}
+
+function renderHzSelector() {
+  const container = document.getElementById('dres-hz-selector');
+  if (!container) return;
+
+  container.innerHTML = '';
+  const list = DisplayResState.supportedHz.length ? DisplayResState.supportedHz : [59, 60, 72, 75, 120, 144, 165, 180, 200, 240, 360];
+  list.forEach(hz => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `dres-hz-pill${hz === DisplayResState.selectedHz ? ' active' : ''}`;
+    btn.dataset.hz = hz;
+    btn.textContent = `${hz} Hz`;
+    btn.addEventListener('click', () => {
+      SoundEngine.playClick();
+      DisplayResState.selectedHz = hz;
+      renderHzSelector();
+      updateDisplayResUI();
+    });
+    container.appendChild(btn);
+  });
+}
+
+function handleDisplayInfo(msg) {
+  DisplayResState.currentWidth = msg.currentWidth || 0;
+  DisplayResState.currentHeight = msg.currentHeight || 0;
+  DisplayResState.currentHz = msg.currentHz || 0;
+  DisplayResState.nativeWidth = msg.nativeWidth || 0;
+  DisplayResState.nativeHeight = msg.nativeHeight || 0;
+  DisplayResState.nativeHz = msg.nativeHz || 0;
+  if (Array.isArray(msg.supportedHz) && msg.supportedHz.length) {
+    DisplayResState.supportedHz = msg.supportedHz.sort((a, b) => a - b);
+  }
+
+  // Pick suitable Hz if none or not available
+  if (!DisplayResState.selectedHz || !DisplayResState.supportedHz.includes(DisplayResState.selectedHz)) {
+    DisplayResState.selectedHz = DisplayResState.currentHz || DisplayResState.supportedHz[DisplayResState.supportedHz.length - 1] || 60;
+  }
+
+  renderHzSelector();
+  updateDisplayResUI();
+}
+
+function handleDisplayResult(msg) {
+  if (msg.ok) {
+    showToast(msg.message || t('dres.appliedSuccess', { w: msg.width, h: msg.height, hz: msg.hz }), 'success');
+  } else {
+    showToast(msg.message || t('dres.applyFailed'), 'error');
+  }
+}
+
+function handleDisplayRestoreResult(msg) {
+  if (msg.ok) {
+    showToast(msg.message || t('dres.restoredSuccess'), 'success');
+  } else {
+    showToast(msg.message || 'Failed to restore display', 'error');
+  }
+}
+
+// ----------------------------------------------------------
+// GameLoop ADB boost (GFX tab)
+// ----------------------------------------------------------
+const BoostState = { running: false, steps: [], results: [] };
+
+// Step names as sent by the backend - mapped onto translated labels
+const BOOST_STEPS_EN = [
+  'UI animations off',
+  'Close idle background apps',
+  'Keep PUBG awake (Doze whitelist)',
+  'Faster app optimization (dex2oat threads)',
+  'Background apps to low priority',
+  'PUBG high priority'
+];
+
+function boostStepLabel(name) {
+  const i = BOOST_STEPS_EN.indexOf(name);
+  return i >= 0 ? t(`boost.step.${i}`) : name;
+}
+
+function renderBoost() {
+  const card = document.getElementById('boost-card');
+  const title = document.getElementById('boost-title');
+  const fill = document.getElementById('boost-fill');
+  const list = document.getElementById('boost-steps');
+  const steps = BoostState.steps.length ? BoostState.steps : BOOST_STEPS_EN;
+
+  const finished = BoostState.results.filter(r => r && r.status !== 'running').length;
+  const anyResult = BoostState.results.some(Boolean);
+  if (card) card.dataset.state = BoostState.running ? 'running' : anyResult ? 'done' : 'idle';
+  if (fill) fill.style.width = `${Math.round((finished / steps.length) * 100)}%`;
+
+  if (title) {
+    if (BoostState.running) title.textContent = t('boost.running', { done: finished, total: steps.length });
+    else if (anyResult) {
+      const done = BoostState.results.filter(r => r && r.status === 'done').length;
+      title.textContent = t('boost.applied', { done, total: steps.length });
+    } else {
+      const auto = document.getElementById('chk-auto-boost');
+      title.textContent = auto && auto.checked ? t('boost.autoIdle') : t('boost.manualIdle');
     }
   }
 
-  function handleTweaksStatus(msg) {
-    TweakState.elevated = msg.elevated !== false;
-    Object.entries(msg.tweaks || {}).forEach(([id, info]) => renderTweakRow(id, info));
+  if (list) {
+    list.innerHTML = '';
+    steps.forEach((name, i) => {
+      const result = BoostState.results[i];
+      const li = document.createElement('li');
+      li.className = `boost-step${result ? ` is-${result.status}` : ''}`;
+      const dot = document.createElement('span');
+      dot.className = 'boost-step-dot';
+      if (result && result.status === 'done') dot.textContent = '✓';
+      if (result && result.status === 'failed') dot.textContent = '!';
+      const text = document.createElement('div');
+      text.className = 'boost-step-text';
+      const n = document.createElement('span');
+      n.className = 'boost-step-name';
+      n.textContent = boostStepLabel(name);
+      text.appendChild(n);
+      if (result && result.detail) {
+        const d = document.createElement('span');
+        d.className = 'boost-step-detail';
+        d.dir = 'auto';
+        d.textContent = result.detail;
+        text.appendChild(d);
+      }
+      li.append(dot, text);
+      list.appendChild(li);
+    });
   }
 
-  function handleTweakResult(msg) {
-    TweakState.pending.delete(msg.id);
-    renderTweakRow(msg.id, { applied: msg.applied, available: true, needsAdmin: false });
-    showToast(msg.message || (msg.ok ? t('common.done') : t('common.failed')), msg.ok ? 'success' : 'error');
+  const btn = document.getElementById('btn-run-boost');
+  if (btn) {
+    btn.disabled = BoostState.running || Bridge.state !== 'connected';
+    btn.classList.toggle('is-busy', BoostState.running);
+    btn.title = Bridge.state === 'connected' ? '' : t('bridge.connectFirst');
+    const label = btn.querySelector('span');
+    if (label) label.textContent = BoostState.running ? t('boost.btn.running') : anyResult ? t('boost.btn.again') : t('boost.btn.run');
+  }
+}
+
+function handleBoostStatus(msg) {
+  if (msg.phase === 'start') {
+    BoostState.running = true;
+    BoostState.steps = msg.steps || BOOST_STEPS_EN;
+    BoostState.results = [];
+    appendGfxLog('BOOST', t('boost.log.start'));
+  } else if (msg.phase === 'step') {
+    BoostState.results[msg.index] = { status: msg.status, detail: msg.detail };
+    if (msg.status !== 'running') {
+      const name = BoostState.steps[msg.index] ? boostStepLabel(BoostState.steps[msg.index]) : t('boost.stepN', { n: msg.index + 1 });
+      const kind = msg.status === 'done' ? 'ok' : msg.status === 'failed' ? 'err' : 'warn';
+      appendGfxLog('BOOST', `${name}: ${msg.detail || msg.status}`, kind);
+    }
+  } else if (msg.phase === 'done') {
+    BoostState.running = false;
+    const summary = t('boost.summary', { applied: msg.applied, skipped: msg.skipped }) +
+      (msg.failed ? t('boost.summaryFailed', { failed: msg.failed }) : '');
+    appendGfxLog('BOOST', summary, msg.failed ? 'warn' : 'ok');
+    showToast(summary, msg.failed ? 'info' : 'success');
+  } else if (msg.phase === 'error') {
+    BoostState.running = false;
+    showToast(msg.message || t('boost.failed'), 'error');
+  }
+  renderBoost();
+}
+
+// ----------------------------------------------------------
+// PC check (System Optimizer)
+// ----------------------------------------------------------
+const PcState = { last: null };
+
+function setPcRow(id, level, detail) {
+  const row = document.getElementById(id);
+  if (!row) return;
+  row.dataset.level = level;
+  const d = row.querySelector('.pc-check-detail');
+  if (d) d.textContent = detail;
+}
+
+function renderPcCheck() {
+  const msg = PcState.last;
+  if (!msg) return;
+
+  if (msg.hypervisor) setPcRow('pc-row-virt', 'warn', t('pc.virt.hyperv'));
+  else if (!msg.vtFirmware) setPcRow('pc-row-virt', 'bad', t('pc.virt.bios'));
+  else setPcRow('pc-row-virt', 'ok', t('pc.virt.ok'));
+
+  setPcRow('pc-row-hvci', msg.memoryIntegrity ? 'warn' : 'ok', msg.memoryIntegrity ? t('pc.hvci.on') : t('pc.hvci.off'));
+
+  const plan = msg.powerPlan || t('pc.power.unknown');
+  if (msg.highPerfActive) setPcRow('pc-row-power', 'ok', t('pc.power.high', { plan }));
+  else if (msg.highPerfAvailable) setPcRow('pc-row-power', 'warn', t('pc.power.warn', { plan }));
+  else setPcRow('pc-row-power', 'ok', t('pc.power.oem', { plan }));
+}
+
+function handlePcCheck(msg) {
+  PcState.last = msg;
+  renderPcCheck();
+}
+
+// ----------------------------------------------------------
+// Paks Tool
+// ----------------------------------------------------------
+const PaksState = { info: null, selected: '', busy: false, op: '', done: 0, total: 0, index: 0, count: 0, file: '', startedAt: 0, startDone: 0, loading: false };
+
+function formatBytes(bytes) {
+  if (!bytes) return '0 MB';
+  if (bytes >= 1073741824) return `${(bytes / 1073741824).toFixed(2)} GB`;
+  return `${Math.round(bytes / 1048576)} MB`;
+}
+
+function requestPaksInfo() {
+  if (PaksState.busy || PaksState.loading) return;
+  PaksState.loading = true;
+  renderPaks();
+  sendAction('get_paks_info');
+}
+
+function selectedPaksGame() {
+  const games = (PaksState.info && PaksState.info.games) || [];
+  return games.find(g => g.package === PaksState.selected) || games.find(g => g.installed) || games[0] || null;
+}
+
+function renderPaks() {
+  const info = PaksState.info;
+  const connected = Bridge.state === 'connected';
+  const game = selectedPaksGame();
+  if (game) PaksState.selected = game.package;
+
+  const banner = document.getElementById('paks-connect-banner');
+  if (banner) banner.hidden = connected;
+
+  // Game picker (only when more than one PUBG build is involved)
+  const picker = document.getElementById('paks-game-select');
+  const games = (info && info.games) || [];
+  if (picker) {
+    picker.hidden = games.length < 2;
+    picker.innerHTML = '';
+    games.forEach(g => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = `chip-item${g.package === PaksState.selected ? ' selected' : ''}`;
+      chip.textContent = versionName(g.version) || g.package;
+      chip.addEventListener('click', () => { PaksState.selected = g.package; renderPaks(); });
+      picker.appendChild(chip);
+    });
   }
 
-  function requestTweak(id, enable) {
-    if (TweakState.pending.has(id)) return;
-    TweakState.pending.add(id);
-    const row = document.querySelector(`.tweak-toggle-row[data-tweak="${id}"]`);
-    if (row) row.classList.add('is-pending');
-    sendAction('set_tweak', { id, enable: enable ? 1 : 0 });
+  const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+  const name = game ? (versionName(game.version) || game.package) : '--';
+
+  // Emulator side
+  set('paks-remote-game', game && game.installed ? name : (connected ? t('paks.notInstalled') : '--'));
+  set('paks-remote-version', game && game.gameVersion ? game.gameVersion : '--');
+  set('paks-remote-files', game && game.installed ? String(game.remoteFiles) : '--');
+  set('paks-remote-size', game && game.installed ? formatBytes(game.remoteBytes) : '--');
+  let note = '';
+  if (PaksState.loading) note = t('paks.reading');
+  else if (connected && info && !games.some(g => g.installed)) note = t('paks.noPubg');
+  else if (game && game.installed && game.remoteFiles === 0) note = t('paks.noPaks');
+  else if (game && game.running) note = t('paks.running');
+  set('paks-remote-note', note);
+
+  // PC side
+  const backup = game && game.backup;
+  set('paks-local-path', backup ? backup.path : (info ? info.folder : t('paks.defaultFolder')));
+  set('paks-local-date', backup && backup.exists ? backup.date : t('paks.noBackup'));
+  set('paks-local-version', backup && backup.exists ? (backup.version || '--') : '--');
+  set('paks-local-files', backup && backup.exists ? String(backup.files) : '--');
+  set('paks-local-size', backup && backup.exists ? formatBytes(backup.bytes) : '--');
+
+  // Buttons
+  const canPull = connected && !PaksState.busy && game && game.installed && game.remoteFiles > 0;
+  const canPush = connected && !PaksState.busy && game && game.installed && backup && backup.exists && !game.running;
+  const pull = document.getElementById('btn-paks-pull');
+  const push = document.getElementById('btn-paks-push');
+  if (pull) pull.disabled = !canPull;
+  if (push) push.disabled = !canPush;
+  const cancel = document.getElementById('btn-paks-cancel');
+  if (cancel) cancel.hidden = !PaksState.busy;
+  const refresh = document.getElementById('btn-paks-refresh');
+  if (refresh) refresh.disabled = PaksState.busy || PaksState.loading;
+
+  // Progress
+  const progress = document.getElementById('paks-progress');
+  if (progress) progress.hidden = !PaksState.busy && !PaksState.op;
+  if (PaksState.op) {
+    const pct = PaksState.total ? Math.min(100, Math.floor((PaksState.done / PaksState.total) * 100)) : 0;
+    set('paks-progress-title', PaksState.busy
+      ? (PaksState.op === 'pull' ? t('paks.pulling') : t('paks.pushing'))
+      : (PaksState.op === 'pull' ? t('paks.pullDone') : t('paks.pushDone')));
+    set('paks-progress-pct', `${pct}%`);
+    const fill = document.getElementById('paks-fill');
+    if (fill) fill.style.width = `${pct}%`;
+    set('paks-progress-file', PaksState.count ? t('paks.fileProgress', { i: PaksState.index, n: PaksState.count, file: PaksState.file }) : '');
+    const elapsed = (Date.now() - PaksState.startedAt) / 1000;
+    const speed = elapsed > 1 ? (PaksState.done - PaksState.startDone) / elapsed : 0;
+    const eta = speed > 0 ? Math.max(0, (PaksState.total - PaksState.done) / speed) : 0;
+    set('paks-progress-speed', PaksState.busy && speed > 0
+      ? `${formatBytes(PaksState.done)} / ${formatBytes(PaksState.total)} · ${(speed / 1048576).toFixed(1)} MB/s · ${t('paks.minLeft', { min: Math.ceil(eta / 60) })}`
+      : `${formatBytes(PaksState.done)} / ${formatBytes(PaksState.total)}`);
+  }
+}
+
+function handlePaksInfo(msg) {
+  PaksState.loading = false;
+  PaksState.info = msg;
+  if (msg.busy) PaksState.busy = true;
+  renderPaks();
+}
+
+function handlePaksStatus(msg) {
+  const opName = msg.op === 'pull' ? t('paks.op.pull') : t('paks.op.push');
+  if (msg.phase === 'mode') {
+    PaksState.mode = msg.message;
+    appendGfxLog('PAKS', msg.message, msg.message.startsWith('Fast') ? 'ok' : 'warn');
+  } else if (msg.phase === 'start') {
+    PaksState.busy = true;
+    PaksState.op = msg.op;
+    PaksState.done = 0;
+    PaksState.total = msg.total;
+    PaksState.count = msg.count;
+    PaksState.index = 0;
+    PaksState.startedAt = Date.now();
+    PaksState.startDone = 0;
+    appendGfxLog('PAKS', msg.message);
+  } else if (msg.phase === 'progress') {
+    PaksState.busy = true;
+    PaksState.op = msg.op;
+    PaksState.done = msg.done;
+    PaksState.total = msg.total;
+    PaksState.index = msg.index;
+    PaksState.count = msg.count;
+    PaksState.file = msg.file;
+  } else if (msg.phase === 'done') {
+    PaksState.busy = false;
+    PaksState.done = msg.total;
+    appendGfxLog('PAKS', msg.message, 'ok');
+    showToast(msg.message, 'success');
+  } else if (msg.phase === 'confirm') {
+    PaksState.busy = false;
+    if (confirm(msg.message)) {
+      PaksState.busy = true;
+      sendAction('push_paks', { package: msg.package, force: 1 });
+    }
+  } else if (msg.phase === 'cancelled') {
+    PaksState.busy = false;
+    appendGfxLog('PAKS', msg.message, 'warn');
+    showToast(msg.message, 'info');
+  } else if (msg.phase === 'error') {
+    PaksState.busy = false;
+    appendGfxLog('PAKS', t('paks.opFailed', { op: opName, msg: msg.message }), 'err');
+    showToast(msg.message, 'error');
+  }
+  renderPaks();
+}
+
+// ----------------------------------------------------------
+// ModSkin + Twitter fix status (badge, buttons, log)
+// ----------------------------------------------------------
+const ModSkinState = { status: 'ready', busyKey: 'ms.working', op: '' };
+const TwitterState = { status: 'ready', busyKey: 'ms.working' };
+
+function appendStatusLog(boxId, itemClass, status, text) {
+  const logBox = document.getElementById(boxId);
+  if (!logBox || !text) return;
+  const item = document.createElement('div');
+  item.className = `${itemClass} ${status || 'info'}`;
+  item.dir = 'auto';
+  item.textContent = `[${new Date().toLocaleTimeString('en-GB')}] ${text}`;
+  logBox.appendChild(item);
+  logBox.scrollTop = logBox.scrollHeight;
+}
+
+function renderModSkin() {
+  const badge = document.getElementById('modskin-status-badge');
+  const btnAdd = document.getElementById('btn-modskin-add');
+  const btnRemove = document.getElementById('btn-modskin-remove');
+  const status = ModSkinState.status;
+  const isBusy = status === 'busy';
+
+  if (badge) {
+    badge.dataset.status = status;
+    badge.textContent = isBusy ? t(ModSkinState.busyKey)
+      : status === 'success' ? t('ms.active')
+        : status === 'removed' ? t('ms.removed')
+          : status === 'error' ? t('ms.error') : t('ms.ready');
+  }
+  if (btnAdd) {
+    btnAdd.disabled = isBusy;
+    btnAdd.classList.toggle('is-busy', isBusy && ModSkinState.op === 'add');
+    const label = btnAdd.querySelector('span');
+    if (label) label.textContent = isBusy && ModSkinState.op === 'add' ? t('ms.injecting') : t('ms.add');
+  }
+  if (btnRemove) {
+    btnRemove.disabled = isBusy;
+    btnRemove.classList.toggle('is-busy', isBusy && ModSkinState.op === 'remove');
+  }
+}
+
+function handleModSkinStatus(msg) {
+  ModSkinState.status = msg.status || 'ready';
+  if (ModSkinState.status === 'busy') ModSkinState.busyKey = 'ms.working';
+  else ModSkinState.op = '';
+  renderModSkin();
+
+  appendStatusLog('modskin-log-box', 'modskin-log-item', msg.status, msg.message);
+
+  if (EasyActionModal.currentOp === 'modskin') {
+    if (msg.status === 'busy') {
+      EasyActionModal.updateMessage(msg.message);
+    } else if (msg.status === 'success') {
+      EasyActionModal.complete(true, msg.message || t('ms.toast.ok'));
+    } else if (msg.status === 'error') {
+      EasyActionModal.complete(false, msg.message || t('ms.toast.err'));
+    }
   }
 
-  // ----------------------------------------------------------
-  // Resolution page
-  // ----------------------------------------------------------
-  const RES_PRESETS = [
-    { id: 'hd169', cat: 'standard', w: 1280, h: 720 },
-    { id: 'fhd169', cat: 'standard', w: 1920, h: 1080 },
-    { id: 'qhd169', cat: 'standard', w: 2560, h: 1440 },
-    { id: 'wide1610', cat: 'standard', w: 1720, h: 1080 },
-    { id: 'lowTall', cat: 'tall', w: 1280, h: 1080 },
-    { id: 'classic43', cat: '43', w: 1440, h: 1080 },
-    { id: 'sharp43', cat: '43', w: 1920, h: 1440 },
-    { id: 'native43', cat: '43', w: 2880, h: 2160 },
-    { id: 'ipadSquare', cat: 'ipad', w: 2300, h: 1920 },
-    { id: 'ipadPro', cat: 'ipad', w: 2200, h: 2180 },
-    { id: 'uwTall', cat: 'tall', w: 1920, h: 1800 },
-    { id: 'uwMax', cat: 'tall', w: 1920, h: 1900 }
+  if (msg.status === 'success') {
+    showToast(msg.message || t('ms.toast.ok'), 'success');
+  } else if (msg.status === 'removed') {
+    showToast(msg.message || t('ms.toast.removed'), 'info');
+  } else if (msg.status === 'error') {
+    showToast(msg.message || t('ms.toast.err'), 'error');
+  }
+}
+
+function renderTwitter() {
+  const badge = document.getElementById('twitter-status-badge');
+  const btnApply = document.getElementById('btn-twitter-apply');
+  const btnRestore = document.getElementById('btn-twitter-restore');
+  const status = TwitterState.status;
+  const isBusy = status === 'busy';
+
+  if (badge) {
+    badge.dataset.status = status;
+    badge.textContent = isBusy ? t(TwitterState.busyKey)
+      : status === 'success' ? t('tt.applied')
+        : status === 'error' ? t('ms.error') : t('ms.ready');
+  }
+  if (btnApply) {
+    btnApply.disabled = isBusy;
+    btnApply.classList.toggle('is-busy', isBusy);
+  }
+  if (btnRestore) {
+    btnRestore.disabled = isBusy;
+    btnRestore.classList.toggle('is-busy', isBusy);
+  }
+}
+
+function handleTwitterStatus(msg) {
+  TwitterState.status = msg.status || 'ready';
+  if (TwitterState.status === 'busy') TwitterState.busyKey = 'ms.working';
+  renderTwitter();
+
+  appendStatusLog('twitter-log-box', 'twitter-log-item', msg.status, msg.message);
+
+  if (EasyActionModal.currentOp === 'fix_twitter') {
+    if (msg.status === 'busy') {
+      EasyActionModal.updateMessage(msg.message);
+    } else if (msg.status === 'success' || msg.status === 'restored') {
+      EasyActionModal.complete(true, msg.message || t('tt.toast.ok'));
+    } else if (msg.status === 'error') {
+      EasyActionModal.complete(false, msg.message || t('tt.toast.err'));
+    }
+  }
+
+  if (msg.status === 'success') {
+    showToast(msg.message || t('tt.toast.ok'), 'success');
+  } else if (msg.status === 'restored') {
+    showToast(msg.message || t('tt.toast.restored'), 'info');
+  } else if (msg.status === 'error') {
+    showToast(msg.message || t('tt.toast.err'), 'error');
+  }
+}
+
+// ----------------------------------------------------------
+// Fixer 32Bit Controller
+// ----------------------------------------------------------
+const Fixer32State = {
+  applied: false,
+  busy: false
+};
+
+function handleHostsFixStatus(msg) {
+  Fixer32State.applied = !!msg.applied;
+  renderFixer32();
+}
+
+function handleHostsFixResult(msg) {
+  Fixer32State.busy = false;
+  const isSuccess = msg.status === 'success' || msg.status === 'already_applied';
+  showToast(msg.message, isSuccess ? 'success' : 'error');
+  const logEl = document.getElementById('fixer32-log-msg');
+  if (logEl) {
+    logEl.textContent = msg.message;
+    logEl.className = `twitter-log-item ${isSuccess ? 'ok' : 'err'}`;
+  }
+  renderFixer32();
+}
+
+function renderFixer32() {
+  const badge = document.getElementById('fixer32-status-badge');
+  const btnApply = document.getElementById('btn-fixer32-apply');
+  const btnRemove = document.getElementById('btn-fixer32-remove');
+
+  if (badge) {
+    if (Fixer32State.applied) {
+      badge.dataset.status = 'applied';
+      badge.textContent = t('fixer32.applied');
+    } else {
+      badge.dataset.status = 'ready';
+      badge.textContent = t('fixer32.notApplied');
+    }
+  }
+
+  if (btnApply) {
+    btnApply.disabled = Fixer32State.busy;
+  }
+  if (btnRemove) {
+    btnRemove.disabled = Fixer32State.busy;
+  }
+}
+
+// ----------------------------------------------------------
+// Easy Mode Controller (Cyber Cafe / Player Mode)
+// ----------------------------------------------------------
+const EasyModeState = {
+  enabled: false,
+  allowedTabs: ['home']
+};
+
+function autoConnectGameLoop() {
+  if (Bridge.state === 'connected' || BUSY_STATES.includes(Bridge.state)) return;
+  Bridge.lastLogged = '';
+  appendGfxLog("ADB", Bridge.emulatorRunning ? t('log.checkBridge') : t('log.startingGl'));
+  BoostState.results = [];
+  renderBoost();
+  sendAction('connect_gameloop', { autoBoost: document.getElementById('chk-auto-boost')?.checked ? 1 : 0 });
+}
+
+function applyEasyMode(enabled, showNotification = false) {
+  EasyModeState.enabled = !!enabled;
+  localStorage.setItem('cyperopt_easy_mode', EasyModeState.enabled ? '1' : '0');
+
+  document.body.classList.toggle('is-easy-mode', EasyModeState.enabled);
+
+  // Badge in header
+  const badge = document.getElementById('header-easy-badge');
+  if (badge) {
+    badge.style.display = EasyModeState.enabled ? 'inline-flex' : 'none';
+  }
+
+  // Toggle in settings modal
+  const chk = document.getElementById('chk-easy-mode');
+  if (chk) {
+    chk.checked = EasyModeState.enabled;
+  }
+
+  // Row active highlight in settings modal
+  const row = document.getElementById('settings-row-easy');
+  if (row) {
+    row.classList.toggle('is-active', EasyModeState.enabled);
+  }
+
+  // Status tag in settings modal
+  const statusTag = document.getElementById('easy-mode-status-tag');
+  if (statusTag) {
+    statusTag.textContent = EasyModeState.enabled ? t('settings.active') : t('settings.inactive');
+  }
+
+  // Filter sidebar navigation tabs (in Easy Mode, ONLY home is visible!)
+  document.querySelectorAll('.menu-tab').forEach(tab => {
+    const tabName = tab.dataset.tab;
+    if (EasyModeState.enabled && !EasyModeState.allowedTabs.includes(tabName)) {
+      tab.style.display = 'none';
+    } else {
+      tab.style.display = '';
+    }
+  });
+
+  // If current active tab is not home in Easy Mode, switch to home
+  if (EasyModeState.enabled && currentTab !== 'home') {
+    switchTab('home');
+  }
+
+  // If newly turned on and auth is unlocked, trigger auto-connect
+  if (EasyModeState.enabled && Auth.unlocked) {
+    autoConnectGameLoop();
+  }
+
+  // Maintain license level visibility overrides
+  applyLicenseLevelPermissions();
+
+  if (showNotification) {
+    showToast(EasyModeState.enabled ? t('settings.toastOn') : t('settings.toastOff'), EasyModeState.enabled ? 'success' : 'info');
+  }
+}
+
+function openSettingsModal() {
+  SoundEngine.playClick();
+  const modal = document.getElementById('settings-modal');
+  if (modal) {
+    modal.removeAttribute('hidden');
+    modal.classList.add('open');
+    const chk = document.getElementById('chk-easy-mode');
+    if (chk) chk.checked = EasyModeState.enabled;
+    const row = document.getElementById('settings-row-easy');
+    if (row) row.classList.toggle('is-active', EasyModeState.enabled);
+    const statusTag = document.getElementById('easy-mode-status-tag');
+    if (statusTag) statusTag.textContent = EasyModeState.enabled ? t('settings.active') : t('settings.inactive');
+  }
+}
+
+function closeSettingsModal() {
+  SoundEngine.playClick();
+  const modal = document.getElementById('settings-modal');
+  if (modal) {
+    modal.classList.remove('open');
+    modal.setAttribute('hidden', '');
+  }
+}
+
+// ----------------------------------------------------------
+// Easy Mode Action Loading Modal Controller
+// ----------------------------------------------------------
+const EasyActionModal = {
+  currentOp: null,
+  timer: null,
+
+  open(op, title, desc, iconSvg) {
+    this.currentOp = op;
+    clearTimeout(this.timer);
+
+    const modal = document.getElementById('easy-loading-modal');
+    const card = document.getElementById('easy-loading-card');
+    const titleEl = document.getElementById('easy-loading-title');
+    const descEl = document.getElementById('easy-loading-desc');
+    const spinner = document.getElementById('easy-loading-spinner');
+    const resultIcon = document.getElementById('easy-loading-result-icon');
+    const iconEl = document.getElementById('easy-loading-icon');
+    const actions = document.getElementById('easy-loading-actions');
+    const bar = document.getElementById('easy-loading-bar');
+
+    if (!modal) return;
+
+    modal.hidden = false;
+    modal.classList.add('open');
+    if (card) {
+      card.className = 'action-modal-card is-loading';
+    }
+
+    if (titleEl) titleEl.textContent = title;
+    if (descEl) descEl.textContent = desc;
+    if (spinner) spinner.hidden = false;
+    if (resultIcon) resultIcon.hidden = true;
+    if (actions) actions.hidden = true;
+    if (bar) {
+      bar.style.width = '45%';
+      bar.className = 'action-modal-progress-fill is-animating';
+      bar.style.background = '';
+    }
+
+    if (iconEl && iconSvg) {
+      iconEl.innerHTML = iconSvg;
+    }
+  },
+
+  updateMessage(desc) {
+    const descEl = document.getElementById('easy-loading-desc');
+    if (descEl && desc) descEl.textContent = desc;
+  },
+
+  complete(isSuccess, message) {
+    if (!this.currentOp) return;
+    const card = document.getElementById('easy-loading-card');
+    const titleEl = document.getElementById('easy-loading-title');
+    const descEl = document.getElementById('easy-loading-desc');
+    const spinner = document.getElementById('easy-loading-spinner');
+    const resultIcon = document.getElementById('easy-loading-result-icon');
+    const actions = document.getElementById('easy-loading-actions');
+    const bar = document.getElementById('easy-loading-bar');
+
+    if (card) {
+      card.className = `action-modal-card ${isSuccess ? 'is-success' : 'is-error'}`;
+    }
+
+    if (spinner) spinner.hidden = true;
+    if (resultIcon) {
+      resultIcon.hidden = false;
+      resultIcon.innerHTML = isSuccess
+        ? '<svg viewBox="0 0 24 24" width="42" height="42" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>'
+        : '<svg viewBox="0 0 24 24" width="42" height="42" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>';
+    }
+
+    if (titleEl) {
+      titleEl.textContent = isSuccess ? t('easy.modal.success') : t('easy.modal.error');
+    }
+    if (descEl && message) {
+      descEl.textContent = message;
+    }
+
+    if (bar) {
+      bar.className = 'action-modal-progress-fill';
+      bar.style.width = isSuccess ? '100%' : '0%';
+      bar.style.background = isSuccess ? '#22c55e' : '#ef4444';
+    }
+
+    if (actions) {
+      actions.hidden = false;
+    }
+
+    // Auto-close on success after 1.8 seconds
+    if (isSuccess) {
+      this.timer = setTimeout(() => {
+        this.close();
+      }, 1800);
+    }
+  },
+
+  close() {
+    clearTimeout(this.timer);
+    this.currentOp = null;
+    const modal = document.getElementById('easy-loading-modal');
+    if (modal) {
+      modal.classList.remove('open');
+      setTimeout(() => {
+        modal.hidden = true;
+      }, 300);
+    }
+  }
+};
+
+// Select a chip option helper
+function selectChipOption(groupSelector, value) {
+  const group = document.querySelector(groupSelector);
+  if (!group) return;
+  const chip = group.querySelector(`.chip-item[data-val="${value}"]`);
+  if (chip) {
+    group.querySelectorAll('.chip-item').forEach(c => c.classList.remove('selected'));
+    chip.classList.add('selected');
+  }
+}
+
+const selectedChipLabel = group => {
+  const chip = document.querySelector(`${group} .chip-item.selected`);
+  return chip ? (chip.querySelector('span') || chip).textContent.trim() : '';
+};
+
+// Listen for Native WebView Messages
+if (IS_NATIVE) {
+  window.chrome.webview.addEventListener('message', (event) => {
+    handleNativeMessage(event.data);
+  });
+}
+
+// Live Clock
+function startClock() {
+  const clock = document.getElementById('clock-display');
+  const tick = () => {
+    if (clock) {
+      const d = new Date();
+      const h = String(d.getHours()).padStart(2, '0');
+      const m = String(d.getMinutes()).padStart(2, '0');
+      const s = String(d.getSeconds()).padStart(2, '0');
+      clock.textContent = `${h}:${m}:${s}`;
+    }
+  };
+  setInterval(tick, 1000);
+  tick();
+}
+
+// Re-render everything that is built from state after a language switch
+function rerenderAll() {
+  renderTabHeader();
+  renderAuth();
+  renderLicense();
+  renderBridge();
+  renderSystemInfo();
+  renderPcCheck();
+  Object.entries(TweakState.info).forEach(([id, info]) => renderTweakRow(id, info));
+  renderResolutionPage();
+  renderSavedResolutions();
+  renderGameSync();
+  renderModSkin();
+  renderTwitter();
+  renderFixer32();
+  updateDisplayResUI();
+  renderHzSelector();
+  applyEasyMode(EasyModeState.enabled);
+}
+
+// ----------------------------------------------------------
+// Splash / Loading Screen Controller
+// ----------------------------------------------------------
+function runSplashScreen() {
+  const splash = document.getElementById('splash-screen');
+  const bar = document.getElementById('splash-progress-bar');
+  const pct = document.getElementById('splash-percentage');
+  const status = document.getElementById('splash-status-text');
+
+  if (!splash) return;
+
+  const steps = [
+    { target: 20, text: 'INITIALIZING ENGINE CORE...', delay: 180 },
+    { target: 45, text: 'CALIBRATING MEMORY HOOKS...', delay: 320 },
+    { target: 70, text: 'VERIFYING SECURITY INTEGRITY...', delay: 450 },
+    { target: 90, text: 'LOADING HARDWARE TELEMETRY...', delay: 350 },
+    { target: 100, text: 'CYPEROPT SYSTEM READY', delay: 300 }
   ];
 
-  const ResState = { width: 0, height: 0, dpi: 0, emulatorRunning: false, restartNeeded: false, restarting: false, saved: [] };
+  let currentPct = 0;
+  let stepIndex = 0;
 
-  function aspectLabel(w, h) {
-    if (!w || !h) return '--';
-    const r = w / h;
-    const known = [[16 / 9, '16:9'], [16 / 10, '16:10'], [4 / 3, '4:3'], [5 / 4, '5:4'], [1, '1:1']];
-    for (const [value, label] of known) if (Math.abs(r - value) < 0.012) return label;
-    return `${r.toFixed(2)}:1`;
-  }
-
-  const isHeavy = (w, h) => w * h >= 4000000;
-
-  const ARROW_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"></path></svg>';
-
-  function renderResolutionPage() {
-    const { width, height, dpi } = ResState;
-    const known = width > 0 && height > 0;
-
-    const value = document.getElementById('res-current-value');
-    if (value) value.textContent = known ? `${width} × ${height}` : t('res.unknown');
-    const aspect = document.getElementById('res-current-aspect');
-    if (aspect) aspect.textContent = known ? aspectLabel(width, height) : '--';
-    const dpiEl = document.getElementById('res-current-dpi');
-    if (dpiEl) dpiEl.textContent = dpi ? `DPI ${dpi}` : 'DPI --';
-    const emu = document.getElementById('res-emulator-state');
-    if (emu) {
-      emu.textContent = ResState.emulatorRunning ? t('res.glRunning') : t('res.glClosed');
-      emu.classList.toggle('is-on', ResState.emulatorRunning);
-    }
-
-    const banner = document.getElementById('res-restart-banner');
-    if (banner) banner.hidden = !(ResState.restartNeeded && ResState.emulatorRunning) && !ResState.restarting;
-    const restartBtn = document.getElementById('btn-res-restart');
-    if (restartBtn) {
-      restartBtn.disabled = ResState.restarting;
-      restartBtn.textContent = ResState.restarting ? t('res.restarting') : t('res.restart');
-    }
-
-    // Presets
-    const grid = document.getElementById('res-preset-grid');
-    if (grid) {
-      grid.innerHTML = '';
-      RES_PRESETS.forEach(p => {
-        const current = p.w === width && p.h === height;
-        const card = document.createElement('div');
-        card.className = `res-preset${current ? ' is-current' : ''}`;
-
-        const head = document.createElement('div');
-        head.className = 'res-preset-head';
-        const name = document.createElement('span');
-        name.className = 'res-preset-name';
-        name.textContent = t(`res.p.${p.id}`);
-        const size = document.createElement('span');
-        size.className = 'res-preset-size';
-        size.textContent = `${p.w}×${p.h}`;
-        head.append(name, size);
-
-        const cat = document.createElement('div');
-        cat.className = 'res-preset-cat';
-        cat.textContent = `${t(`res.cat.${p.cat}`)} · ${aspectLabel(p.w, p.h)}`;
-        if (current) cat.append(makeResTag(t('res.tag.current'), 'is-current'));
-        if (isHeavy(p.w, p.h)) cat.append(makeResTag(t('res.tag.heavy'), 'is-heavy'));
-
-        const desc = document.createElement('div');
-        desc.className = 'res-preset-desc';
-        desc.textContent = t(`res.p.${p.id}.desc`);
-
-        const btn = document.createElement('button');
-        btn.className = 'btn-module-action';
-        btn.type = 'button';
-        btn.disabled = current;
-        const label = document.createElement('span');
-        label.textContent = current ? t('res.active') : t('res.apply');
-        btn.append(label);
-        btn.insertAdjacentHTML('beforeend', ARROW_ICON);
-        btn.addEventListener('click', () => {
-          SoundEngine.playClick();
-          sendAction('set_resolution', { width: p.w, height: p.h, dpi: 0 });
-        });
-
-        card.append(head, cat, desc, btn);
-        grid.appendChild(card);
-      });
-    }
-  }
-
-  function makeResTag(text, cls) {
-    const tag = document.createElement('span');
-    tag.className = `res-tag ${cls || ''}`;
-    tag.textContent = text;
-    return tag;
-  }
-
-  function renderSavedResolutions() {
-    const list = document.getElementById('res-saved-list');
-    if (!list) return;
-    const saved = ResState.saved;
-    list.innerHTML = '';
-
-    if (!saved.length) {
-      const empty = document.createElement('div');
-      empty.className = 'empty-state';
-      empty.textContent = t('res.emptySaved');
-      list.appendChild(empty);
+  function advance() {
+    if (stepIndex >= steps.length) {
+      setTimeout(() => {
+        splash.classList.add('fade-out');
+        setTimeout(() => {
+          splash.style.display = 'none';
+        }, 700);
+      }, 350);
       return;
     }
 
-    saved.forEach(r => {
-      const current = r.width === ResState.width && r.height === ResState.height && (!r.dpi || r.dpi === ResState.dpi);
-      const item = document.createElement('div');
-      item.className = `res-saved-item${current ? ' is-current' : ''}`;
+    const { target, text, delay } = steps[stepIndex];
+    if (status) status.textContent = text;
 
-      const info = document.createElement('div');
-      info.className = 'res-saved-info';
-      const title = document.createElement('div');
-      title.className = 'res-saved-title';
-      const size = document.createElement('span');
-      size.className = 'ltr-text';
-      size.textContent = `${r.width} × ${r.height}`;
-      title.append(size);
-      if (r.note === 'Original') title.append(makeResTag(t('res.tag.original'), 'is-original'));
-      if (current) title.append(makeResTag(t('res.tag.current'), 'is-current'));
-      const sub = document.createElement('div');
-      sub.className = 'res-saved-sub';
-      sub.textContent = `${aspectLabel(r.width, r.height)} · DPI ${r.dpi || '--'} · ${r.date}`;
-      info.append(title, sub);
-
-      const restore = document.createElement('button');
-      restore.className = 'btn-res-small';
-      restore.type = 'button';
-      restore.textContent = current ? t('res.active') : t('res.restore');
-      restore.disabled = current;
-      restore.addEventListener('click', () => {
-        SoundEngine.playClick();
-        sendAction('restore_resolution', { id: r.id });
-      });
-
-      const del = document.createElement('button');
-      del.className = 'btn-res-small is-danger';
-      del.type = 'button';
-      del.textContent = t('res.delete');
-      del.addEventListener('click', () => {
-        if (r.note === 'Original' && !confirm(t('res.confirmDeleteOriginal'))) return;
-        SoundEngine.playClick();
-        sendAction('delete_resolution', { id: r.id });
-      });
-
-      item.append(info, restore, del);
-      list.appendChild(item);
-    });
-  }
-
-  function handleResolutionInfo(msg) {
-    ResState.width = msg.width || 0;
-    ResState.height = msg.height || 0;
-    ResState.dpi = msg.dpi || 0;
-    ResState.emulatorRunning = !!msg.emulatorRunning;
-    ResState.saved = msg.saved || [];
-    if (msg.restartNeeded) ResState.restartNeeded = true;
-    if (msg.status) ResState.restarting = false;
-    if (msg.message && msg.message.startsWith('GameLoop restarted')) ResState.restartNeeded = false;
-
-    renderResolutionPage();
-    renderSavedResolutions();
-
-    if (msg.message) {
-      showToast(msg.message, msg.status === 'error' ? 'error' : msg.status === 'info' ? 'info' : 'success');
-    }
-  }
-
-  // ----------------------------------------------------------
-  // Display Resolution & Stretched iPad View
-  // ----------------------------------------------------------
-  const DisplayResState = {
-    currentWidth: 0,
-    currentHeight: 0,
-    currentHz: 0,
-    nativeWidth: 0,
-    nativeHeight: 0,
-    nativeHz: 0,
-    supportedHz: [59, 60, 72, 75, 120, 144, 165, 180, 200, 240, 360],
-    selectedWidth: 1440,
-    selectedHeight: 1080,
-    selectedHz: 144,
-    usePreferredHz: true,
-    favorite: null
-  };
-
-  function gcd(a, b) {
-    a = Math.abs(Math.round(a));
-    b = Math.abs(Math.round(b));
-    while (b) {
-      const t = b;
-      b = a % b;
-      a = t;
-    }
-    return a || 1;
-  }
-
-  function calculateAspectRatio(w, h) {
-    if (!w || !h) return { text: '--', badge: '', isIpad: false, ratio: 1 };
-    const r = w / h;
-    const d = gcd(w, h);
-    const rw = Math.round(w / d);
-    const rh = Math.round(h / d);
-
-    let isIpad = false;
-    let badge = '';
-
-    if (Math.abs(r - 4 / 3) < 0.02) {
-      badge = '4:3 ' + t('dres.tag.ipad');
-      isIpad = true;
-    } else if (Math.abs(r - 16 / 10) < 0.02 || Math.abs(r - 8 / 5) < 0.02) {
-      badge = '16:10 ' + t('dres.tag.balanced');
-      isIpad = true;
-    } else if (Math.abs(r - 5 / 4) < 0.02) {
-      badge = '5:4 ' + t('dres.tag.stretched');
-      isIpad = true;
-    } else if (Math.abs(r - 16 / 9) < 0.02) {
-      badge = '16:9 ' + t('dres.tag.native');
-    } else {
-      badge = `${rw}:${rh}`;
-    }
-
-    let text = `${rw}:${rh}`;
-    if (Math.abs(r - 4 / 3) < 0.005) text = '4:3';
-    else if (Math.abs(r - 16 / 10) < 0.005) text = '16:10';
-    else if (Math.abs(r - 16 / 9) < 0.005) text = '16:9';
-    else if (Math.abs(r - 5 / 4) < 0.005) text = '5:4';
-
-    return { text, badge, isIpad, ratio: r };
-  }
-
-  function updateDisplayResUI() {
-    const w = DisplayResState.selectedWidth || 1440;
-    const h = DisplayResState.selectedHeight || 1080;
-    const hz = DisplayResState.selectedHz || 60;
-
-    // Inputs
-    const inW = document.getElementById('dres-input-w');
-    const inH = document.getElementById('dres-input-h');
-    if (inW && parseInt(inW.value, 10) !== w) inW.value = w;
-    if (inH && parseInt(inH.value, 10) !== h) inH.value = h;
-
-    // Aspect ratio calculation
-    const ar = calculateAspectRatio(w, h);
-    const ratioText = document.getElementById('dres-ratio-text');
-    const ratioBadge = document.getElementById('dres-ratio-badge');
-    if (ratioText) ratioText.textContent = ar.text;
-    if (ratioBadge) {
-      ratioBadge.textContent = ar.badge;
-      ratioBadge.classList.toggle('is-ipad', ar.isIpad);
-    }
-
-    // Monitor preview
-    const screen = document.getElementById('dres-monitor-screen');
-    const hudRes = document.getElementById('dres-hud-res');
-    const hudHz = document.getElementById('dres-hud-hz');
-    if (screen) {
-      screen.style.aspectRatio = `${w} / ${h}`;
-    }
-    if (hudRes) hudRes.textContent = `${w} × ${h}`;
-    if (hudHz) hudHz.textContent = `${hz} Hz`;
-
-    // Quick chips active state
-    document.querySelectorAll('.dres-chip[data-set-w]').forEach(chip => {
-      chip.classList.toggle('active', parseInt(chip.dataset.setW, 10) === w);
-    });
-    document.querySelectorAll('.dres-chip[data-set-h]').forEach(chip => {
-      chip.classList.toggle('active', parseInt(chip.dataset.setH, 10) === h);
-    });
-
-    // Presets cards active state
-    document.querySelectorAll('.dres-preset-card').forEach(card => {
-      const pw = parseInt(card.dataset.pw, 10);
-      const ph = parseInt(card.dataset.ph, 10);
-      card.classList.toggle('is-active', pw === w && ph === h);
-    });
-
-    // Telemetry status bar
-    const statusPreview = document.getElementById('dres-status-preview');
-    const statusHz = document.getElementById('dres-status-hz');
-    const statusRatio = document.getElementById('dres-status-ratio');
-    const statusCurrent = document.getElementById('dres-status-current');
-
-    if (statusPreview) statusPreview.textContent = `${w} × ${h}`;
-    if (statusHz) statusHz.textContent = `${hz} Hz`;
-    if (statusRatio) statusRatio.textContent = ar.text;
-    if (statusCurrent) {
-      const curW = DisplayResState.currentWidth;
-      const curH = DisplayResState.currentHeight;
-      const curHz = DisplayResState.currentHz;
-      statusCurrent.textContent = curW > 0 ? `${curW} × ${curH} @ ${curHz}Hz` : '-- × -- @ --Hz';
-    }
-  }
-
-  function renderHzSelector() {
-    const container = document.getElementById('dres-hz-selector');
-    if (!container) return;
-
-    container.innerHTML = '';
-    const list = DisplayResState.supportedHz.length ? DisplayResState.supportedHz : [59, 60, 72, 75, 120, 144, 165, 180, 200, 240, 360];
-    list.forEach(hz => {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = `dres-hz-pill${hz === DisplayResState.selectedHz ? ' active' : ''}`;
-      btn.dataset.hz = hz;
-      btn.textContent = `${hz} Hz`;
-      btn.addEventListener('click', () => {
-        SoundEngine.playClick();
-        DisplayResState.selectedHz = hz;
-        renderHzSelector();
-        updateDisplayResUI();
-      });
-      container.appendChild(btn);
-    });
-  }
-
-  function handleDisplayInfo(msg) {
-    DisplayResState.currentWidth = msg.currentWidth || 0;
-    DisplayResState.currentHeight = msg.currentHeight || 0;
-    DisplayResState.currentHz = msg.currentHz || 0;
-    DisplayResState.nativeWidth = msg.nativeWidth || 0;
-    DisplayResState.nativeHeight = msg.nativeHeight || 0;
-    DisplayResState.nativeHz = msg.nativeHz || 0;
-    if (Array.isArray(msg.supportedHz) && msg.supportedHz.length) {
-      DisplayResState.supportedHz = msg.supportedHz.sort((a, b) => a - b);
-    }
-
-    // Pick suitable Hz if none or not available
-    if (!DisplayResState.selectedHz || !DisplayResState.supportedHz.includes(DisplayResState.selectedHz)) {
-      DisplayResState.selectedHz = DisplayResState.currentHz || DisplayResState.supportedHz[DisplayResState.supportedHz.length - 1] || 60;
-    }
-
-    renderHzSelector();
-    updateDisplayResUI();
-  }
-
-  function handleDisplayResult(msg) {
-    if (msg.ok) {
-      showToast(msg.message || t('dres.appliedSuccess', { w: msg.width, h: msg.height, hz: msg.hz }), 'success');
-    } else {
-      showToast(msg.message || t('dres.applyFailed'), 'error');
-    }
-  }
-
-  function handleDisplayRestoreResult(msg) {
-    if (msg.ok) {
-      showToast(msg.message || t('dres.restoredSuccess'), 'success');
-    } else {
-      showToast(msg.message || 'Failed to restore display', 'error');
-    }
-  }
-
-  // ----------------------------------------------------------
-  // GameLoop ADB boost (GFX tab)
-  // ----------------------------------------------------------
-  const BoostState = { running: false, steps: [], results: [] };
-
-  // Step names as sent by the backend - mapped onto translated labels
-  const BOOST_STEPS_EN = [
-    'UI animations off',
-    'Close idle background apps',
-    'Keep PUBG awake (Doze whitelist)',
-    'Faster app optimization (dex2oat threads)',
-    'Background apps to low priority',
-    'PUBG high priority'
-  ];
-
-  function boostStepLabel(name) {
-    const i = BOOST_STEPS_EN.indexOf(name);
-    return i >= 0 ? t(`boost.step.${i}`) : name;
-  }
-
-  function renderBoost() {
-    const card = document.getElementById('boost-card');
-    const title = document.getElementById('boost-title');
-    const fill = document.getElementById('boost-fill');
-    const list = document.getElementById('boost-steps');
-    const steps = BoostState.steps.length ? BoostState.steps : BOOST_STEPS_EN;
-
-    const finished = BoostState.results.filter(r => r && r.status !== 'running').length;
-    const anyResult = BoostState.results.some(Boolean);
-    if (card) card.dataset.state = BoostState.running ? 'running' : anyResult ? 'done' : 'idle';
-    if (fill) fill.style.width = `${Math.round((finished / steps.length) * 100)}%`;
-
-    if (title) {
-      if (BoostState.running) title.textContent = t('boost.running', { done: finished, total: steps.length });
-      else if (anyResult) {
-        const done = BoostState.results.filter(r => r && r.status === 'done').length;
-        title.textContent = t('boost.applied', { done, total: steps.length });
+    const interval = setInterval(() => {
+      if (currentPct < target) {
+        currentPct++;
+        if (bar) bar.style.width = `${currentPct}%`;
+        if (pct) pct.textContent = `${currentPct}%`;
       } else {
-        const auto = document.getElementById('chk-auto-boost');
-        title.textContent = auto && auto.checked ? t('boost.autoIdle') : t('boost.manualIdle');
+        clearInterval(interval);
+        stepIndex++;
+        setTimeout(advance, delay);
       }
-    }
-
-    if (list) {
-      list.innerHTML = '';
-      steps.forEach((name, i) => {
-        const result = BoostState.results[i];
-        const li = document.createElement('li');
-        li.className = `boost-step${result ? ` is-${result.status}` : ''}`;
-        const dot = document.createElement('span');
-        dot.className = 'boost-step-dot';
-        if (result && result.status === 'done') dot.textContent = '✓';
-        if (result && result.status === 'failed') dot.textContent = '!';
-        const text = document.createElement('div');
-        text.className = 'boost-step-text';
-        const n = document.createElement('span');
-        n.className = 'boost-step-name';
-        n.textContent = boostStepLabel(name);
-        text.appendChild(n);
-        if (result && result.detail) {
-          const d = document.createElement('span');
-          d.className = 'boost-step-detail';
-          d.dir = 'auto';
-          d.textContent = result.detail;
-          text.appendChild(d);
-        }
-        li.append(dot, text);
-        list.appendChild(li);
-      });
-    }
-
-    const btn = document.getElementById('btn-run-boost');
-    if (btn) {
-      btn.disabled = BoostState.running || Bridge.state !== 'connected';
-      btn.classList.toggle('is-busy', BoostState.running);
-      btn.title = Bridge.state === 'connected' ? '' : t('bridge.connectFirst');
-      const label = btn.querySelector('span');
-      if (label) label.textContent = BoostState.running ? t('boost.btn.running') : anyResult ? t('boost.btn.again') : t('boost.btn.run');
-    }
+    }, 10);
   }
 
-  function handleBoostStatus(msg) {
-    if (msg.phase === 'start') {
-      BoostState.running = true;
-      BoostState.steps = msg.steps || BOOST_STEPS_EN;
-      BoostState.results = [];
-      appendGfxLog('BOOST', t('boost.log.start'));
-    } else if (msg.phase === 'step') {
-      BoostState.results[msg.index] = { status: msg.status, detail: msg.detail };
-      if (msg.status !== 'running') {
-        const name = BoostState.steps[msg.index] ? boostStepLabel(BoostState.steps[msg.index]) : t('boost.stepN', { n: msg.index + 1 });
-        const kind = msg.status === 'done' ? 'ok' : msg.status === 'failed' ? 'err' : 'warn';
-        appendGfxLog('BOOST', `${name}: ${msg.detail || msg.status}`, kind);
-      }
-    } else if (msg.phase === 'done') {
-      BoostState.running = false;
-      const summary = t('boost.summary', { applied: msg.applied, skipped: msg.skipped }) +
-        (msg.failed ? t('boost.summaryFailed', { failed: msg.failed }) : '');
-      appendGfxLog('BOOST', summary, msg.failed ? 'warn' : 'ok');
-      showToast(summary, msg.failed ? 'info' : 'success');
-    } else if (msg.phase === 'error') {
-      BoostState.running = false;
-      showToast(msg.message || t('boost.failed'), 'error');
-    }
-    renderBoost();
-  }
+  advance();
+}
 
-  // ----------------------------------------------------------
-  // PC check (System Optimizer)
-  // ----------------------------------------------------------
-  const PcState = { last: null };
+// ----------------------------------------------------------
+// Initialize Application on DOM Ready
+// ----------------------------------------------------------
+document.addEventListener('DOMContentLoaded', () => {
+  runSplashScreen();
+  switchTab('home', true);
+  startClock();
+  renderBridge();
+  renderAuth();
+  onLanguageChange(rerenderAll);
 
-  function setPcRow(id, level, detail) {
-    const row = document.getElementById(id);
-    if (!row) return;
-    row.dataset.level = level;
-    const d = row.querySelector('.pc-check-detail');
-    if (d) d.textContent = detail;
-  }
+  appendGfxLog('INIT', t('log.init'));
+  appendGfxLog('READY', t('log.ready'));
 
-  function renderPcCheck() {
-    const msg = PcState.last;
-    if (!msg) return;
-
-    if (msg.hypervisor) setPcRow('pc-row-virt', 'warn', t('pc.virt.hyperv'));
-    else if (!msg.vtFirmware) setPcRow('pc-row-virt', 'bad', t('pc.virt.bios'));
-    else setPcRow('pc-row-virt', 'ok', t('pc.virt.ok'));
-
-    setPcRow('pc-row-hvci', msg.memoryIntegrity ? 'warn' : 'ok', msg.memoryIntegrity ? t('pc.hvci.on') : t('pc.hvci.off'));
-
-    const plan = msg.powerPlan || t('pc.power.unknown');
-    if (msg.highPerfActive) setPcRow('pc-row-power', 'ok', t('pc.power.high', { plan }));
-    else if (msg.highPerfAvailable) setPcRow('pc-row-power', 'warn', t('pc.power.warn', { plan }));
-    else setPcRow('pc-row-power', 'ok', t('pc.power.oem', { plan }));
-  }
-
-  function handlePcCheck(msg) {
-    PcState.last = msg;
-    renderPcCheck();
-  }
-
-  // ----------------------------------------------------------
-  // Paks Tool
-  // ----------------------------------------------------------
-  const PaksState = { info: null, selected: '', busy: false, op: '', done: 0, total: 0, index: 0, count: 0, file: '', startedAt: 0, startDone: 0, loading: false };
-
-  function formatBytes(bytes) {
-    if (!bytes) return '0 MB';
-    if (bytes >= 1073741824) return `${(bytes / 1073741824).toFixed(2)} GB`;
-    return `${Math.round(bytes / 1048576)} MB`;
-  }
-
-  function requestPaksInfo() {
-    if (PaksState.busy || PaksState.loading) return;
-    PaksState.loading = true;
-    renderPaks();
-    sendAction('get_paks_info');
-  }
-
-  function selectedPaksGame() {
-    const games = (PaksState.info && PaksState.info.games) || [];
-    return games.find(g => g.package === PaksState.selected) || games.find(g => g.installed) || games[0] || null;
-  }
-
-  function renderPaks() {
-    const info = PaksState.info;
-    const connected = Bridge.state === 'connected';
-    const game = selectedPaksGame();
-    if (game) PaksState.selected = game.package;
-
-    const banner = document.getElementById('paks-connect-banner');
-    if (banner) banner.hidden = connected;
-
-    // Game picker (only when more than one PUBG build is involved)
-    const picker = document.getElementById('paks-game-select');
-    const games = (info && info.games) || [];
-    if (picker) {
-      picker.hidden = games.length < 2;
-      picker.innerHTML = '';
-      games.forEach(g => {
-        const chip = document.createElement('button');
-        chip.type = 'button';
-        chip.className = `chip-item${g.package === PaksState.selected ? ' selected' : ''}`;
-        chip.textContent = versionName(g.version) || g.package;
-        chip.addEventListener('click', () => { PaksState.selected = g.package; renderPaks(); });
-        picker.appendChild(chip);
-      });
-    }
-
-    const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
-    const name = game ? (versionName(game.version) || game.package) : '--';
-
-    // Emulator side
-    set('paks-remote-game', game && game.installed ? name : (connected ? t('paks.notInstalled') : '--'));
-    set('paks-remote-version', game && game.gameVersion ? game.gameVersion : '--');
-    set('paks-remote-files', game && game.installed ? String(game.remoteFiles) : '--');
-    set('paks-remote-size', game && game.installed ? formatBytes(game.remoteBytes) : '--');
-    let note = '';
-    if (PaksState.loading) note = t('paks.reading');
-    else if (connected && info && !games.some(g => g.installed)) note = t('paks.noPubg');
-    else if (game && game.installed && game.remoteFiles === 0) note = t('paks.noPaks');
-    else if (game && game.running) note = t('paks.running');
-    set('paks-remote-note', note);
-
-    // PC side
-    const backup = game && game.backup;
-    set('paks-local-path', backup ? backup.path : (info ? info.folder : t('paks.defaultFolder')));
-    set('paks-local-date', backup && backup.exists ? backup.date : t('paks.noBackup'));
-    set('paks-local-version', backup && backup.exists ? (backup.version || '--') : '--');
-    set('paks-local-files', backup && backup.exists ? String(backup.files) : '--');
-    set('paks-local-size', backup && backup.exists ? formatBytes(backup.bytes) : '--');
-
-    // Buttons
-    const canPull = connected && !PaksState.busy && game && game.installed && game.remoteFiles > 0;
-    const canPush = connected && !PaksState.busy && game && game.installed && backup && backup.exists && !game.running;
-    const pull = document.getElementById('btn-paks-pull');
-    const push = document.getElementById('btn-paks-push');
-    if (pull) pull.disabled = !canPull;
-    if (push) push.disabled = !canPush;
-    const cancel = document.getElementById('btn-paks-cancel');
-    if (cancel) cancel.hidden = !PaksState.busy;
-    const refresh = document.getElementById('btn-paks-refresh');
-    if (refresh) refresh.disabled = PaksState.busy || PaksState.loading;
-
-    // Progress
-    const progress = document.getElementById('paks-progress');
-    if (progress) progress.hidden = !PaksState.busy && !PaksState.op;
-    if (PaksState.op) {
-      const pct = PaksState.total ? Math.min(100, Math.floor((PaksState.done / PaksState.total) * 100)) : 0;
-      set('paks-progress-title', PaksState.busy
-        ? (PaksState.op === 'pull' ? t('paks.pulling') : t('paks.pushing'))
-        : (PaksState.op === 'pull' ? t('paks.pullDone') : t('paks.pushDone')));
-      set('paks-progress-pct', `${pct}%`);
-      const fill = document.getElementById('paks-fill');
-      if (fill) fill.style.width = `${pct}%`;
-      set('paks-progress-file', PaksState.count ? t('paks.fileProgress', { i: PaksState.index, n: PaksState.count, file: PaksState.file }) : '');
-      const elapsed = (Date.now() - PaksState.startedAt) / 1000;
-      const speed = elapsed > 1 ? (PaksState.done - PaksState.startDone) / elapsed : 0;
-      const eta = speed > 0 ? Math.max(0, (PaksState.total - PaksState.done) / speed) : 0;
-      set('paks-progress-speed', PaksState.busy && speed > 0
-        ? `${formatBytes(PaksState.done)} / ${formatBytes(PaksState.total)} · ${(speed / 1048576).toFixed(1)} MB/s · ${t('paks.minLeft', { min: Math.ceil(eta / 60) })}`
-        : `${formatBytes(PaksState.done)} / ${formatBytes(PaksState.total)}`);
-    }
-  }
-
-  function handlePaksInfo(msg) {
-    PaksState.loading = false;
-    PaksState.info = msg;
-    if (msg.busy) PaksState.busy = true;
-    renderPaks();
-  }
-
-  function handlePaksStatus(msg) {
-    const opName = msg.op === 'pull' ? t('paks.op.pull') : t('paks.op.push');
-    if (msg.phase === 'mode') {
-      PaksState.mode = msg.message;
-      appendGfxLog('PAKS', msg.message, msg.message.startsWith('Fast') ? 'ok' : 'warn');
-    } else if (msg.phase === 'start') {
-      PaksState.busy = true;
-      PaksState.op = msg.op;
-      PaksState.done = 0;
-      PaksState.total = msg.total;
-      PaksState.count = msg.count;
-      PaksState.index = 0;
-      PaksState.startedAt = Date.now();
-      PaksState.startDone = 0;
-      appendGfxLog('PAKS', msg.message);
-    } else if (msg.phase === 'progress') {
-      PaksState.busy = true;
-      PaksState.op = msg.op;
-      PaksState.done = msg.done;
-      PaksState.total = msg.total;
-      PaksState.index = msg.index;
-      PaksState.count = msg.count;
-      PaksState.file = msg.file;
-    } else if (msg.phase === 'done') {
-      PaksState.busy = false;
-      PaksState.done = msg.total;
-      appendGfxLog('PAKS', msg.message, 'ok');
-      showToast(msg.message, 'success');
-    } else if (msg.phase === 'confirm') {
-      PaksState.busy = false;
-      if (confirm(msg.message)) {
-        PaksState.busy = true;
-        sendAction('push_paks', { package: msg.package, force: 1 });
-      }
-    } else if (msg.phase === 'cancelled') {
-      PaksState.busy = false;
-      appendGfxLog('PAKS', msg.message, 'warn');
-      showToast(msg.message, 'info');
-    } else if (msg.phase === 'error') {
-      PaksState.busy = false;
-      appendGfxLog('PAKS', t('paks.opFailed', { op: opName, msg: msg.message }), 'err');
-      showToast(msg.message, 'error');
-    }
-    renderPaks();
-  }
-
-  // ----------------------------------------------------------
-  // ModSkin + Twitter fix status (badge, buttons, log)
-  // ----------------------------------------------------------
-  const ModSkinState = { status: 'ready', busyKey: 'ms.working', op: '' };
-  const TwitterState = { status: 'ready', busyKey: 'ms.working' };
-
-  function appendStatusLog(boxId, itemClass, status, text) {
-    const logBox = document.getElementById(boxId);
-    if (!logBox || !text) return;
-    const item = document.createElement('div');
-    item.className = `${itemClass} ${status || 'info'}`;
-    item.dir = 'auto';
-    item.textContent = `[${new Date().toLocaleTimeString('en-GB')}] ${text}`;
-    logBox.appendChild(item);
-    logBox.scrollTop = logBox.scrollHeight;
-  }
-
-  function renderModSkin() {
-    const badge = document.getElementById('modskin-status-badge');
-    const btnAdd = document.getElementById('btn-modskin-add');
-    const btnRemove = document.getElementById('btn-modskin-remove');
-    const status = ModSkinState.status;
-    const isBusy = status === 'busy';
-
-    if (badge) {
-      badge.dataset.status = status;
-      badge.textContent = isBusy ? t(ModSkinState.busyKey)
-        : status === 'success' ? t('ms.active')
-          : status === 'removed' ? t('ms.removed')
-            : status === 'error' ? t('ms.error') : t('ms.ready');
-    }
-    if (btnAdd) {
-      btnAdd.disabled = isBusy;
-      btnAdd.classList.toggle('is-busy', isBusy && ModSkinState.op === 'add');
-      const label = btnAdd.querySelector('span');
-      if (label) label.textContent = isBusy && ModSkinState.op === 'add' ? t('ms.injecting') : t('ms.add');
-    }
-    if (btnRemove) {
-      btnRemove.disabled = isBusy;
-      btnRemove.classList.toggle('is-busy', isBusy && ModSkinState.op === 'remove');
-    }
-  }
-
-  function handleModSkinStatus(msg) {
-    ModSkinState.status = msg.status || 'ready';
-    if (ModSkinState.status === 'busy') ModSkinState.busyKey = 'ms.working';
-    else ModSkinState.op = '';
-    renderModSkin();
-
-    appendStatusLog('modskin-log-box', 'modskin-log-item', msg.status, msg.message);
-
-    if (EasyActionModal.currentOp === 'modskin') {
-      if (msg.status === 'busy') {
-        EasyActionModal.updateMessage(msg.message);
-      } else if (msg.status === 'success') {
-        EasyActionModal.complete(true, msg.message || t('ms.toast.ok'));
-      } else if (msg.status === 'error') {
-        EasyActionModal.complete(false, msg.message || t('ms.toast.err'));
-      }
-    }
-
-    if (msg.status === 'success') {
-      showToast(msg.message || t('ms.toast.ok'), 'success');
-    } else if (msg.status === 'removed') {
-      showToast(msg.message || t('ms.toast.removed'), 'info');
-    } else if (msg.status === 'error') {
-      showToast(msg.message || t('ms.toast.err'), 'error');
-    }
-  }
-
-  function renderTwitter() {
-    const badge = document.getElementById('twitter-status-badge');
-    const btnApply = document.getElementById('btn-twitter-apply');
-    const btnRestore = document.getElementById('btn-twitter-restore');
-    const status = TwitterState.status;
-    const isBusy = status === 'busy';
-
-    if (badge) {
-      badge.dataset.status = status;
-      badge.textContent = isBusy ? t(TwitterState.busyKey)
-        : status === 'success' ? t('tt.applied')
-          : status === 'error' ? t('ms.error') : t('ms.ready');
-    }
-    if (btnApply) {
-      btnApply.disabled = isBusy;
-      btnApply.classList.toggle('is-busy', isBusy);
-    }
-    if (btnRestore) {
-      btnRestore.disabled = isBusy;
-      btnRestore.classList.toggle('is-busy', isBusy);
-    }
-  }
-
-  function handleTwitterStatus(msg) {
-    TwitterState.status = msg.status || 'ready';
-    if (TwitterState.status === 'busy') TwitterState.busyKey = 'ms.working';
-    renderTwitter();
-
-    appendStatusLog('twitter-log-box', 'twitter-log-item', msg.status, msg.message);
-
-    if (EasyActionModal.currentOp === 'fix_twitter') {
-      if (msg.status === 'busy') {
-        EasyActionModal.updateMessage(msg.message);
-      } else if (msg.status === 'success' || msg.status === 'restored') {
-        EasyActionModal.complete(true, msg.message || t('tt.toast.ok'));
-      } else if (msg.status === 'error') {
-        EasyActionModal.complete(false, msg.message || t('tt.toast.err'));
-      }
-    }
-
-    if (msg.status === 'success') {
-      showToast(msg.message || t('tt.toast.ok'), 'success');
-    } else if (msg.status === 'restored') {
-      showToast(msg.message || t('tt.toast.restored'), 'info');
-    } else if (msg.status === 'error') {
-      showToast(msg.message || t('tt.toast.err'), 'error');
-    }
-  }
-
-  // ----------------------------------------------------------
-  // Fixer 32Bit Controller
-  // ----------------------------------------------------------
-  const Fixer32State = {
-    applied: false,
-    busy: false
-  };
-
-  function handleHostsFixStatus(msg) {
-    Fixer32State.applied = !!msg.applied;
-    renderFixer32();
-  }
-
-  function handleHostsFixResult(msg) {
-    Fixer32State.busy = false;
-    const isSuccess = msg.status === 'success' || msg.status === 'already_applied';
-    showToast(msg.message, isSuccess ? 'success' : 'error');
-    const logEl = document.getElementById('fixer32-log-msg');
-    if (logEl) {
-      logEl.textContent = msg.message;
-      logEl.className = `twitter-log-item ${isSuccess ? 'ok' : 'err'}`;
-    }
-    renderFixer32();
-  }
-
-  function renderFixer32() {
-    const badge = document.getElementById('fixer32-status-badge');
-    const btnApply = document.getElementById('btn-fixer32-apply');
-    const btnRemove = document.getElementById('btn-fixer32-remove');
-
-    if (badge) {
-      if (Fixer32State.applied) {
-        badge.dataset.status = 'applied';
-        badge.textContent = t('fixer32.applied');
-      } else {
-        badge.dataset.status = 'ready';
-        badge.textContent = t('fixer32.notApplied');
-      }
-    }
-
-    if (btnApply) {
-      btnApply.disabled = Fixer32State.busy;
-    }
-    if (btnRemove) {
-      btnRemove.disabled = Fixer32State.busy;
-    }
-  }
-
-  // ----------------------------------------------------------
-  // Easy Mode Controller (Cyber Cafe / Player Mode)
-  // ----------------------------------------------------------
-  const EasyModeState = {
-    enabled: false,
-    allowedTabs: ['home']
-  };
-
-  function autoConnectGameLoop() {
-    if (Bridge.state === 'connected' || BUSY_STATES.includes(Bridge.state)) return;
-    Bridge.lastLogged = '';
-    appendGfxLog("ADB", Bridge.emulatorRunning ? t('log.checkBridge') : t('log.startingGl'));
-    BoostState.results = [];
-    renderBoost();
-    sendAction('connect_gameloop', { autoBoost: document.getElementById('chk-auto-boost')?.checked ? 1 : 0 });
-  }
-
-  function applyEasyMode(enabled, showNotification = false) {
-    EasyModeState.enabled = !!enabled;
-    localStorage.setItem('cyperopt_easy_mode', EasyModeState.enabled ? '1' : '0');
-
-    document.body.classList.toggle('is-easy-mode', EasyModeState.enabled);
-
-    // Badge in header
-    const badge = document.getElementById('header-easy-badge');
-    if (badge) {
-      badge.style.display = EasyModeState.enabled ? 'inline-flex' : 'none';
-    }
-
-    // Toggle in settings modal
-    const chk = document.getElementById('chk-easy-mode');
-    if (chk) {
-      chk.checked = EasyModeState.enabled;
-    }
-
-    // Row active highlight in settings modal
-    const row = document.getElementById('settings-row-easy');
-    if (row) {
-      row.classList.toggle('is-active', EasyModeState.enabled);
-    }
-
-    // Status tag in settings modal
-    const statusTag = document.getElementById('easy-mode-status-tag');
-    if (statusTag) {
-      statusTag.textContent = EasyModeState.enabled ? t('settings.active') : t('settings.inactive');
-    }
-
-    // Filter sidebar navigation tabs (in Easy Mode, ONLY home is visible!)
-    document.querySelectorAll('.menu-tab').forEach(tab => {
-      const tabName = tab.dataset.tab;
-      if (EasyModeState.enabled && !EasyModeState.allowedTabs.includes(tabName)) {
-        tab.style.display = 'none';
-      } else {
-        tab.style.display = '';
-      }
+  // Language toggles (login screen + header)
+  document.querySelectorAll('[data-lang-toggle]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      SoundEngine.playClick();
+      setLanguage(Lang.current === 'ar' ? 'en' : 'ar');
     });
+  });
 
-    // If current active tab is not home in Easy Mode, switch to home
-    if (EasyModeState.enabled && currentTab !== 'home') {
-      switchTab('home');
+  // License login form
+  const authForm = document.getElementById('auth-form');
+  const authInput = document.getElementById('auth-key');
+  authForm?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (Auth.state !== 'locked') return;
+
+    const key = (authInput?.value || '').replace(/\s+/g, '');
+    if (authInput) authInput.value = key;
+    Auth.error = !key ? { code: 'empty' } : !KEY_PATTERN.test(key) ? { code: 'format' } : null;
+    Auth.canUpdate = false;
+    if (Auth.error) {
+      renderAuth();
+      shakeAuthPanel();
+      focusAuthInput();
+      return;
     }
 
-    // If newly turned on and auth is unlocked, trigger auto-connect
-    if (EasyModeState.enabled && Auth.unlocked) {
-      autoConnectGameLoop();
-    }
-
-    // Maintain license level visibility overrides
-    applyLicenseLevelPermissions();
-
-    if (showNotification) {
-      showToast(EasyModeState.enabled ? t('settings.toastOn') : t('settings.toastOff'), EasyModeState.enabled ? 'success' : 'info');
-    }
-  }
-
-  function openSettingsModal() {
     SoundEngine.playClick();
-    const modal = document.getElementById('settings-modal');
-    if (modal) {
-      modal.removeAttribute('hidden');
-      modal.classList.add('open');
-      const chk = document.getElementById('chk-easy-mode');
-      if (chk) chk.checked = EasyModeState.enabled;
-      const row = document.getElementById('settings-row-easy');
-      if (row) row.classList.toggle('is-active', EasyModeState.enabled);
-      const statusTag = document.getElementById('easy-mode-status-tag');
-      if (statusTag) statusTag.textContent = EasyModeState.enabled ? t('settings.active') : t('settings.inactive');
-    }
-  }
-
-  function closeSettingsModal() {
-    SoundEngine.playClick();
-    const modal = document.getElementById('settings-modal');
-    if (modal) {
-      modal.classList.remove('open');
-      modal.setAttribute('hidden', '');
-    }
-  }
-
-  // ----------------------------------------------------------
-  // Easy Mode Action Loading Modal Controller
-  // ----------------------------------------------------------
-  const EasyActionModal = {
-    currentOp: null,
-    timer: null,
-
-    open(op, title, desc, iconSvg) {
-      this.currentOp = op;
-      clearTimeout(this.timer);
-
-      const modal = document.getElementById('easy-loading-modal');
-      const card = document.getElementById('easy-loading-card');
-      const titleEl = document.getElementById('easy-loading-title');
-      const descEl = document.getElementById('easy-loading-desc');
-      const spinner = document.getElementById('easy-loading-spinner');
-      const resultIcon = document.getElementById('easy-loading-result-icon');
-      const iconEl = document.getElementById('easy-loading-icon');
-      const actions = document.getElementById('easy-loading-actions');
-      const bar = document.getElementById('easy-loading-bar');
-
-      if (!modal) return;
-
-      modal.hidden = false;
-      modal.classList.add('open');
-      if (card) {
-        card.className = 'action-modal-card is-loading';
-      }
-
-      if (titleEl) titleEl.textContent = title;
-      if (descEl) descEl.textContent = desc;
-      if (spinner) spinner.hidden = false;
-      if (resultIcon) resultIcon.hidden = true;
-      if (actions) actions.hidden = true;
-      if (bar) {
-        bar.style.width = '45%';
-        bar.className = 'action-modal-progress-fill is-animating';
-        bar.style.background = '';
-      }
-
-      if (iconEl && iconSvg) {
-        iconEl.innerHTML = iconSvg;
-      }
-    },
-
-    updateMessage(desc) {
-      const descEl = document.getElementById('easy-loading-desc');
-      if (descEl && desc) descEl.textContent = desc;
-    },
-
-    complete(isSuccess, message) {
-      if (!this.currentOp) return;
-      const card = document.getElementById('easy-loading-card');
-      const titleEl = document.getElementById('easy-loading-title');
-      const descEl = document.getElementById('easy-loading-desc');
-      const spinner = document.getElementById('easy-loading-spinner');
-      const resultIcon = document.getElementById('easy-loading-result-icon');
-      const actions = document.getElementById('easy-loading-actions');
-      const bar = document.getElementById('easy-loading-bar');
-
-      if (card) {
-        card.className = `action-modal-card ${isSuccess ? 'is-success' : 'is-error'}`;
-      }
-
-      if (spinner) spinner.hidden = true;
-      if (resultIcon) {
-        resultIcon.hidden = false;
-        resultIcon.innerHTML = isSuccess
-          ? '<svg viewBox="0 0 24 24" width="42" height="42" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>'
-          : '<svg viewBox="0 0 24 24" width="42" height="42" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>';
-      }
-
-      if (titleEl) {
-        titleEl.textContent = isSuccess ? t('easy.modal.success') : t('easy.modal.error');
-      }
-      if (descEl && message) {
-        descEl.textContent = message;
-      }
-
-      if (bar) {
-        bar.className = 'action-modal-progress-fill';
-        bar.style.width = isSuccess ? '100%' : '0%';
-        bar.style.background = isSuccess ? '#22c55e' : '#ef4444';
-      }
-
-      if (actions) {
-        actions.hidden = false;
-      }
-
-      // Auto-close on success after 1.8 seconds
-      if (isSuccess) {
-        this.timer = setTimeout(() => {
-          this.close();
-        }, 1800);
-      }
-    },
-
-    close() {
-      clearTimeout(this.timer);
-      this.currentOp = null;
-      const modal = document.getElementById('easy-loading-modal');
-      if (modal) {
-        modal.classList.remove('open');
-        setTimeout(() => {
-          modal.hidden = true;
-        }, 300);
-      }
-    }
-  };
-
-  // Select a chip option helper
-  function selectChipOption(groupSelector, value) {
-    const group = document.querySelector(groupSelector);
-    if (!group) return;
-    const chip = group.querySelector(`.chip-item[data-val="${value}"]`);
-    if (chip) {
-      group.querySelectorAll('.chip-item').forEach(c => c.classList.remove('selected'));
-      chip.classList.add('selected');
-    }
-  }
-
-  const selectedChipLabel = group => {
-    const chip = document.querySelector(`${group} .chip-item.selected`);
-    return chip ? (chip.querySelector('span') || chip).textContent.trim() : '';
-  };
-
-  // Listen for Native WebView Messages
-  if (IS_NATIVE) {
-    window.chrome.webview.addEventListener('message', (event) => {
-      handleNativeMessage(event.data);
-    });
-  }
-
-  // Live Clock
-  function startClock() {
-    const clock = document.getElementById('clock-display');
-    const tick = () => {
-      if (clock) {
-        const d = new Date();
-        const h = String(d.getHours()).padStart(2, '0');
-        const m = String(d.getMinutes()).padStart(2, '0');
-        const s = String(d.getSeconds()).padStart(2, '0');
-        clock.textContent = `${h}:${m}:${s}`;
-      }
-    };
-    setInterval(tick, 1000);
-    tick();
-  }
-
-  // Re-render everything that is built from state after a language switch
-  function rerenderAll() {
-    renderTabHeader();
+    Auth.state = 'checking';
+    Auth.automatic = false;
     renderAuth();
-    renderLicense();
-    renderBridge();
-    renderSystemInfo();
-    renderPcCheck();
-    Object.entries(TweakState.info).forEach(([id, info]) => renderTweakRow(id, info));
-    renderResolutionPage();
-    renderSavedResolutions();
-    renderGameSync();
-    renderModSkin();
-    renderTwitter();
-    renderFixer32();
-    updateDisplayResUI();
-    renderHzSelector();
-    applyEasyMode(EasyModeState.enabled);
-  }
 
-  // ----------------------------------------------------------
-  // Splash / Loading Screen Controller
-  // ----------------------------------------------------------
-  function runSplashScreen() {
-    const splash = document.getElementById('splash-screen');
-    const bar = document.getElementById('splash-progress-bar');
-    const pct = document.getElementById('splash-percentage');
-    const status = document.getElementById('splash-status-text');
-
-    if (!splash) return;
-
-    const steps = [
-      { target: 20, text: 'INITIALIZING ENGINE CORE...', delay: 180 },
-      { target: 45, text: 'CALIBRATING MEMORY HOOKS...', delay: 320 },
-      { target: 70, text: 'VERIFYING SECURITY INTEGRITY...', delay: 450 },
-      { target: 90, text: 'LOADING HARDWARE TELEMETRY...', delay: 350 },
-      { target: 100, text: 'CYPEROPT SYSTEM READY', delay: 300 }
-    ];
-
-    let currentPct = 0;
-    let stepIndex = 0;
-
-    function advance() {
-      if (stepIndex >= steps.length) {
-        setTimeout(() => {
-          splash.classList.add('fade-out');
-          setTimeout(() => {
-            splash.style.display = 'none';
-          }, 700);
-        }, 350);
-        return;
-      }
-
-      const { target, text, delay } = steps[stepIndex];
-      if (status) status.textContent = text;
-
-      const interval = setInterval(() => {
-        if (currentPct < target) {
-          currentPct++;
-          if (bar) bar.style.width = `${currentPct}%`;
-          if (pct) pct.textContent = `${currentPct}%`;
-        } else {
-          clearInterval(interval);
-          stepIndex++;
-          setTimeout(advance, delay);
-        }
-      }, 10);
-    }
-
-    advance();
-  }
-
-  // ----------------------------------------------------------
-  // Initialize Application on DOM Ready
-  // ----------------------------------------------------------
-  document.addEventListener('DOMContentLoaded', () => {
-    runSplashScreen();
-    switchTab('home', true);
-    startClock();
-    renderBridge();
-    renderAuth();
-    onLanguageChange(rerenderAll);
-
-    appendGfxLog('INIT', t('log.init'));
-    appendGfxLog('READY', t('log.ready'));
-
-    // Language toggles (login screen + header)
-    document.querySelectorAll('[data-lang-toggle]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        SoundEngine.playClick();
-        setLanguage(Lang.current === 'ar' ? 'en' : 'ar');
-      });
-    });
-
-    // License login form
-    const authForm = document.getElementById('auth-form');
-    const authInput = document.getElementById('auth-key');
-    authForm?.addEventListener('submit', (e) => {
-      e.preventDefault();
-      if (Auth.state !== 'locked') return;
-
-      const key = (authInput?.value || '').replace(/\s+/g, '');
-      if (authInput) authInput.value = key;
-      Auth.error = !key ? { code: 'empty' } : !KEY_PATTERN.test(key) ? { code: 'format' } : null;
-      Auth.canUpdate = false;
-      if (Auth.error) {
+    clearTimeout(Auth.checkTimeout);
+    Auth.checkTimeout = setTimeout(() => {
+      if (Auth.state === 'checking') {
+        Auth.state = 'locked';
+        Auth.error = { code: 'network' };
         renderAuth();
         shakeAuthPanel();
-        focusAuthInput();
-        return;
       }
+    }, 15000);
 
-      SoundEngine.playClick();
-      Auth.state = 'checking';
-      Auth.automatic = false;
-      renderAuth();
-
-      clearTimeout(Auth.checkTimeout);
-      Auth.checkTimeout = setTimeout(() => {
-        if (Auth.state === 'checking') {
-          Auth.state = 'locked';
-          Auth.error = { code: 'network' };
-          renderAuth();
-          shakeAuthPanel();
-        }
-      }, 15000);
-
-      sendAction('auth_login', { key, remember: document.getElementById('auth-remember')?.checked ? 1 : 0 });
-    });
-    authInput?.addEventListener('input', () => {
-      if (!Auth.error) return;
+    sendAction('auth_login', { key, remember: document.getElementById('auth-remember')?.checked ? 1 : 0 });
+  });
+  authInput?.addEventListener('input', () => {
+    if (!Auth.error) return;
+    Auth.error = null;
+    renderAuth();
+  });
+  document.getElementById('auth-paste')?.addEventListener('click', async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (authInput) authInput.value = String(text || '').replace(/\s+/g, '');
       Auth.error = null;
-      renderAuth();
-    });
-    document.getElementById('auth-paste')?.addEventListener('click', async () => {
-      try {
-        const text = await navigator.clipboard.readText();
-        if (authInput) authInput.value = String(text || '').replace(/\s+/g, '');
-        Auth.error = null;
-      } catch (err) {
-        Auth.error = { code: 'clipboard' };
-      }
-      renderAuth();
-      focusAuthInput();
-    });
-    document.getElementById('auth-update')?.addEventListener('click', () => sendAction('auth_open_download'));
+    } catch (err) {
+      Auth.error = { code: 'clipboard' };
+    }
+    renderAuth();
+    focusAuthInput();
+  });
+  document.getElementById('auth-update')?.addEventListener('click', () => sendAction('auth_open_download'));
+  document.getElementById('btn-update-retry')?.addEventListener('click', () => {
+    sendAction('auth_retry_update');
+    handleUpdateProgress({ status: 'downloading', percent: 0, downloaded: 0, total: 0 });
+  });
+  document.getElementById('btn-update-browser')?.addEventListener('click', () => {
+    sendAction('auth_open_download');
+  });
 
-    // Logout
-    document.getElementById('btn-logout')?.addEventListener('click', () => {
-      if (!confirm(t('auth.logoutConfirm'))) return;
+  // Logout
+  document.getElementById('btn-logout')?.addEventListener('click', () => {
+    if (!confirm(t('auth.logoutConfirm'))) return;
+    SoundEngine.playClick();
+    sendAction('auth_logout');
+  });
+
+  // Navigation Sidebar Tabs
+  document.querySelectorAll('.menu-tab').forEach(btn => {
+    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+  });
+
+  // Chip Selectors
+  document.querySelectorAll('.chips-selector').forEach(group => {
+    group.addEventListener('click', (e) => {
+      const chip = e.target.closest('.chip-item');
+      if (!chip) return;
+
       SoundEngine.playClick();
-      sendAction('auth_logout');
+      group.querySelectorAll('.chip-item').forEach(c => c.classList.remove('selected'));
+      chip.classList.add('selected');
     });
+  });
 
-    // Navigation Sidebar Tabs
-    document.querySelectorAll('.menu-tab').forEach(btn => {
-      btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+  // Hook Toggle Rows (clicks on the switch itself are handled natively by the label)
+  document.querySelectorAll('.hook-row').forEach(row => {
+    row.addEventListener('click', (e) => {
+      if (e.target.closest('.modern-switch')) return;
+      SoundEngine.playClick();
+      const chk = row.querySelector('input[type="checkbox"]');
+      if (chk) chk.checked = !chk.checked;
     });
+  });
 
-    // Chip Selectors
-    document.querySelectorAll('.chips-selector').forEach(group => {
-      group.addEventListener('click', (e) => {
-        const chip = e.target.closest('.chip-item');
-        if (!chip) return;
+  // Save GameLoop Registry Button
+  const btnSaveGl = document.getElementById('btn-save-gameloop');
+  if (btnSaveGl) {
+    btnSaveGl.addEventListener('click', () => {
+      SoundEngine.playClick();
 
-        SoundEngine.playClick();
-        group.querySelectorAll('.chip-item').forEach(c => c.classList.remove('selected'));
-        chip.classList.add('selected');
-      });
+      const apiMode = parseInt(document.querySelector('#grp-render-api .chip-item.selected')?.dataset.val || "1");
+      const resolution = parseInt(document.querySelector('#grp-game-res .chip-item.selected')?.dataset.val || "2");
+      const quality = parseInt(document.querySelector('#grp-gl-quality .chip-item.selected')?.dataset.val || "2");
+      const fps = parseInt(document.querySelector('#grp-gl-fps .chip-item.selected')?.dataset.val || "0");
+
+      const activeHooks = [301, 302, 303, 304, 307, 308].filter(id => document.getElementById(`chk-${id}`)?.checked);
+
+      appendGfxLog("REGISTRY", t('gl.committing'));
+      sendAction('save_gameloop_config', { apiMode, resolution, quality, fps, activeHooks });
     });
+  }
 
-    // Hook Toggle Rows (clicks on the switch itself are handled natively by the label)
-    document.querySelectorAll('.hook-row').forEach(row => {
-      row.addEventListener('click', (e) => {
-        if (e.target.closest('.modern-switch')) return;
-        SoundEngine.playClick();
-        const chk = row.querySelector('input[type="checkbox"]');
-        if (chk) chk.checked = !chk.checked;
-      });
+  // GFX Actions
+  const btnConnect = document.getElementById('btn-connect-gameloop');
+  if (btnConnect) {
+    btnConnect.addEventListener('click', () => {
+      SoundEngine.playClick();
+      Bridge.lastLogged = '';
+      appendGfxLog("ADB", Bridge.emulatorRunning ? t('log.checkBridge') : t('log.startingGl'));
+      BoostState.results = [];
+      renderBoost();
+      sendAction('connect_gameloop', { autoBoost: document.getElementById('chk-auto-boost')?.checked ? 1 : 0 });
     });
+  }
 
-    // Save GameLoop Registry Button
-    const btnSaveGl = document.getElementById('btn-save-gameloop');
-    if (btnSaveGl) {
-      btnSaveGl.addEventListener('click', () => {
-        SoundEngine.playClick();
+  const btnApplyGfx = document.getElementById('btn-apply-gfx');
+  if (btnApplyGfx) {
+    btnApplyGfx.addEventListener('click', () => {
+      if (Bridge.state !== 'connected') {
+        showToast(t('bridge.connectFirst'), 'error');
+        return;
+      }
+      SoundEngine.playClick();
 
-        const apiMode = parseInt(document.querySelector('#grp-render-api .chip-item.selected')?.dataset.val || "1");
-        const resolution = parseInt(document.querySelector('#grp-game-res .chip-item.selected')?.dataset.val || "2");
-        const quality = parseInt(document.querySelector('#grp-gl-quality .chip-item.selected')?.dataset.val || "2");
-        const fps = parseInt(document.querySelector('#grp-gl-fps .chip-item.selected')?.dataset.val || "0");
+      const pick = (grp, def) => parseInt(document.querySelector(`${grp} .chip-item.selected`)?.dataset.val || def);
+      const version = pick('#grp-gfx-version', "1");
+      const quality = pick('#grp-gfx-quality', "2");
+      const fps = pick('#grp-gfx-fps', "5");
+      const style = pick('#grp-gfx-style', "1");
+      const shadows = pick('#grp-gfx-shadows', "1");
 
-        const activeHooks = [301, 302, 303, 304, 307, 308].filter(id => document.getElementById(`chk-${id}`)?.checked);
+      appendGfxLog("GFX", t('log.applyProfile', { q: selectedChipLabel('#grp-gfx-quality') || quality, f: selectedChipLabel('#grp-gfx-fps') || fps }));
+      sendAction('apply_gfx', { version, quality, fps, style, shadows });
+    });
+  }
 
-        appendGfxLog("REGISTRY", t('gl.committing'));
-        sendAction('save_gameloop_config', { apiMode, resolution, quality, fps, activeHooks });
-      });
-    }
+  const btnReadGame = document.getElementById('btn-read-game');
+  if (btnReadGame) {
+    btnReadGame.addEventListener('click', () => {
+      if (Bridge.state !== 'connected') return;
+      SoundEngine.playClick();
+      Bridge.readingGame = true;
+      renderBridge();
+      sendAction('read_game_gfx');
+    });
+  }
 
-    // GFX Actions
-    const btnConnect = document.getElementById('btn-connect-gameloop');
-    if (btnConnect) {
-      btnConnect.addEventListener('click', () => {
-        SoundEngine.playClick();
-        Bridge.lastLogged = '';
-        appendGfxLog("ADB", Bridge.emulatorRunning ? t('log.checkBridge') : t('log.startingGl'));
-        BoostState.results = [];
-        renderBoost();
-        sendAction('connect_gameloop', { autoBoost: document.getElementById('chk-auto-boost')?.checked ? 1 : 0 });
-      });
-    }
+  const btnKill = document.getElementById('btn-kill-emulator');
+  if (btnKill) {
+    btnKill.addEventListener('click', () => {
+      SoundEngine.playClick();
+      appendGfxLog("KILL", t('log.kill'));
+      sendAction('kill_emulator');
+    });
+  }
 
-    const btnApplyGfx = document.getElementById('btn-apply-gfx');
-    if (btnApplyGfx) {
-      btnApplyGfx.addEventListener('click', () => {
-        if (Bridge.state !== 'connected') {
-          showToast(t('bridge.connectFirst'), 'error');
-          return;
-        }
-        SoundEngine.playClick();
+  const btnResetGuest = document.getElementById('btn-reset-guest');
+  if (btnResetGuest) {
+    btnResetGuest.addEventListener('click', () => {
+      if (Bridge.state !== 'connected') {
+        showToast(t('bridge.connectFirst'), 'error');
+        return;
+      }
+      SoundEngine.playClick();
+      appendGfxLog("GUEST", "Resetting guest account for Global (com.tencent.ig)...");
+      btnResetGuest.disabled = true;
+      btnResetGuest.classList.add('is-busy');
+      sendAction('reset_guest');
+    });
+  }
 
-        const pick = (grp, def) => parseInt(document.querySelector(`${grp} .chip-item.selected`)?.dataset.val || def);
-        const version = pick('#grp-gfx-version', "1");
-        const quality = pick('#grp-gfx-quality', "2");
-        const fps = pick('#grp-gfx-fps', "5");
-        const style = pick('#grp-gfx-style', "1");
-        const shadows = pick('#grp-gfx-shadows', "1");
+  const btnClearLog = document.getElementById('btn-clear-log');
+  if (btnClearLog) {
+    btnClearLog.addEventListener('click', () => {
+      const consoleEl = document.getElementById('gfx-log-console');
+      if (consoleEl) consoleEl.innerHTML = '';
+      Bridge.lastLogged = '';
+    });
+  }
 
-        appendGfxLog("GFX", t('log.applyProfile', { q: selectedChipLabel('#grp-gfx-quality') || quality, f: selectedChipLabel('#grp-gfx-fps') || fps }));
-        sendAction('apply_gfx', { version, quality, fps, style, shadows });
-      });
-    }
+  // Tweaks Category Filtering
+  document.querySelectorAll('.filter-tab-btn').forEach(tab => {
+    tab.addEventListener('click', () => {
+      SoundEngine.playClick();
+      document.querySelectorAll('.filter-tab-btn').forEach(tb => tb.classList.remove('active'));
+      tab.classList.add('active');
 
-    const btnReadGame = document.getElementById('btn-read-game');
-    if (btnReadGame) {
-      btnReadGame.addEventListener('click', () => {
-        if (Bridge.state !== 'connected') return;
-        SoundEngine.playClick();
-        Bridge.readingGame = true;
-        renderBridge();
-        sendAction('read_game_gfx');
-      });
-    }
-
-    const btnKill = document.getElementById('btn-kill-emulator');
-    if (btnKill) {
-      btnKill.addEventListener('click', () => {
-        SoundEngine.playClick();
-        appendGfxLog("KILL", t('log.kill'));
-        sendAction('kill_emulator');
-      });
-    }
-
-    const btnResetGuest = document.getElementById('btn-reset-guest');
-    if (btnResetGuest) {
-      btnResetGuest.addEventListener('click', () => {
-        if (Bridge.state !== 'connected') {
-          showToast(t('bridge.connectFirst'), 'error');
-          return;
-        }
-        SoundEngine.playClick();
-        appendGfxLog("GUEST", "Resetting guest account for Global (com.tencent.ig)...");
-        btnResetGuest.disabled = true;
-        btnResetGuest.classList.add('is-busy');
-        sendAction('reset_guest');
-      });
-    }
-
-    const btnClearLog = document.getElementById('btn-clear-log');
-    if (btnClearLog) {
-      btnClearLog.addEventListener('click', () => {
-        const consoleEl = document.getElementById('gfx-log-console');
-        if (consoleEl) consoleEl.innerHTML = '';
-        Bridge.lastLogged = '';
-      });
-    }
-
-    // Tweaks Category Filtering
-    document.querySelectorAll('.filter-tab-btn').forEach(tab => {
-      tab.addEventListener('click', () => {
-        SoundEngine.playClick();
-        document.querySelectorAll('.filter-tab-btn').forEach(tb => tb.classList.remove('active'));
-        tab.classList.add('active');
-
-        const filter = tab.dataset.filter;
-        document.querySelectorAll('.tweak-item, .tweak-toggle-row').forEach(item => {
-          item.hidden = !(filter === 'all' || item.dataset.category === filter);
-        });
+      const filter = tab.dataset.filter;
+      document.querySelectorAll('.tweak-item, .tweak-toggle-row').forEach(item => {
+        item.hidden = !(filter === 'all' || item.dataset.category === filter);
       });
     });
+  });
 
-    // Scopes Search
-    const searchInput = document.getElementById('scopes-search-input');
-    if (searchInput) {
-      searchInput.addEventListener('input', (e) => {
-        const query = e.target.value.toLowerCase().trim();
-        let visible = 0;
-        document.querySelectorAll('.scope-card').forEach(card => {
-          const text = (card.dataset.search || card.innerText).toLowerCase();
-          const match = !query || text.includes(query);
-          card.hidden = !match;
-          if (match) visible++;
-        });
-        const empty = document.getElementById('scopes-empty');
-        if (empty) empty.hidden = visible > 0;
+  // Scopes Search
+  const searchInput = document.getElementById('scopes-search-input');
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+      const query = e.target.value.toLowerCase().trim();
+      let visible = 0;
+      document.querySelectorAll('.scope-card').forEach(card => {
+        const text = (card.dataset.search || card.innerText).toLowerCase();
+        const match = !query || text.includes(query);
+        card.hidden = !match;
+        if (match) visible++;
       });
-    }
-
-    // Reload Hardware Specs
-    const reloadBtn = document.getElementById('btn-reload-specs');
-    if (reloadBtn) {
-      reloadBtn.addEventListener('click', () => {
-        sendAction('get_system_info');
-        showToast(t('toast.telemetry'), 'info');
-      });
-    }
-
-    // Master Turbo Boost Action
-    const turboBtn = document.getElementById('btn-turbo-boost');
-    if (turboBtn) {
-      turboBtn.addEventListener('click', () => {
-        SoundEngine.playClick();
-        showToast(t('toast.turbo'), 'info');
-        sendAction('turbo_boost');
-      });
-    }
-
-    // Tweak toggles
-    document.querySelectorAll('input[data-tweak-toggle]').forEach(input => {
-      input.addEventListener('change', () => {
-        SoundEngine.playClick();
-        const id = input.dataset.tweakToggle;
-        const wanted = input.checked;
-        input.checked = !wanted; // show the real state until the backend confirms
-        requestTweak(id, wanted);
-      });
+      const empty = document.getElementById('scopes-empty');
+      if (empty) empty.hidden = visible > 0;
     });
-    document.querySelectorAll('.tweak-toggle-row').forEach(row => {
-      row.addEventListener('click', (e) => {
-        if (e.target.closest('.modern-switch')) return;
-        const input = row.querySelector('input[data-tweak-toggle]');
-        if (input && !input.disabled) input.click();
-      });
-    });
+  }
 
-    // Resolution page
+  // Reload Hardware Specs
+  const reloadBtn = document.getElementById('btn-reload-specs');
+  if (reloadBtn) {
+    reloadBtn.addEventListener('click', () => {
+      sendAction('get_system_info');
+      showToast(t('toast.telemetry'), 'info');
+    });
+  }
+
+  // Master Turbo Boost Action
+  const turboBtn = document.getElementById('btn-turbo-boost');
+  if (turboBtn) {
+    turboBtn.addEventListener('click', () => {
+      SoundEngine.playClick();
+      showToast(t('toast.turbo'), 'info');
+      sendAction('turbo_boost');
+    });
+  }
+
+  // Tweak toggles
+  document.querySelectorAll('input[data-tweak-toggle]').forEach(input => {
+    input.addEventListener('change', () => {
+      SoundEngine.playClick();
+      const id = input.dataset.tweakToggle;
+      const wanted = input.checked;
+      input.checked = !wanted; // show the real state until the backend confirms
+      requestTweak(id, wanted);
+    });
+  });
+  document.querySelectorAll('.tweak-toggle-row').forEach(row => {
+    row.addEventListener('click', (e) => {
+      if (e.target.closest('.modern-switch')) return;
+      const input = row.querySelector('input[data-tweak-toggle]');
+      if (input && !input.disabled) input.click();
+    });
+  });
+
+  // Resolution page
+  renderResolutionPage();
+  renderSavedResolutions();
+  document.getElementById('btn-res-save')?.addEventListener('click', () => {
+    SoundEngine.playClick();
+    sendAction('save_resolution');
+  });
+  document.getElementById('btn-res-restart')?.addEventListener('click', () => {
+    SoundEngine.playClick();
+    ResState.restarting = true;
     renderResolutionPage();
-    renderSavedResolutions();
-    document.getElementById('btn-res-save')?.addEventListener('click', () => {
-      SoundEngine.playClick();
-      sendAction('save_resolution');
-    });
-    document.getElementById('btn-res-restart')?.addEventListener('click', () => {
-      SoundEngine.playClick();
-      ResState.restarting = true;
-      renderResolutionPage();
-      appendGfxLog('LAUNCH', t('log.restartRes'));
-      sendAction('restart_gameloop');
-    });
-    document.getElementById('btn-res-apply-custom')?.addEventListener('click', () => {
-      const w = parseInt(document.getElementById('res-input-w').value, 10);
-      const h = parseInt(document.getElementById('res-input-h').value, 10);
-      const dpiRaw = document.getElementById('res-input-dpi').value.trim();
-      const dpi = dpiRaw ? parseInt(dpiRaw, 10) : 0;
-      if (!(w >= 640 && w <= 4096 && h >= 480 && h <= 4096)) {
-        showToast(t('res.errRange'), 'error');
-        return;
-      }
-      if (dpiRaw && !(dpi >= 120 && dpi <= 640)) {
-        showToast(t('res.errDpi'), 'error');
-        return;
-      }
-      SoundEngine.playClick();
-      sendAction('set_resolution', { width: w, height: h, dpi });
-    });
-
-    // GameLoop boost
-    const autoBoost = document.getElementById('chk-auto-boost');
-    if (autoBoost) {
-      autoBoost.checked = localStorage.getItem('cyperopt.autoBoost') !== '0';
-      autoBoost.addEventListener('change', () => {
-        localStorage.setItem('cyperopt.autoBoost', autoBoost.checked ? '1' : '0');
-        renderBoost();
-      });
+    appendGfxLog('LAUNCH', t('log.restartRes'));
+    sendAction('restart_gameloop');
+  });
+  document.getElementById('btn-res-apply-custom')?.addEventListener('click', () => {
+    const w = parseInt(document.getElementById('res-input-w').value, 10);
+    const h = parseInt(document.getElementById('res-input-h').value, 10);
+    const dpiRaw = document.getElementById('res-input-dpi').value.trim();
+    const dpi = dpiRaw ? parseInt(dpiRaw, 10) : 0;
+    if (!(w >= 640 && w <= 4096 && h >= 480 && h <= 4096)) {
+      showToast(t('res.errRange'), 'error');
+      return;
     }
-    document.getElementById('btn-run-boost')?.addEventListener('click', () => {
-      if (Bridge.state !== 'connected' || BoostState.running) return;
-      SoundEngine.playClick();
-      sendAction('adb_boost');
-    });
-    renderBoost();
+    if (dpiRaw && !(dpi >= 120 && dpi <= 640)) {
+      showToast(t('res.errDpi'), 'error');
+      return;
+    }
+    SoundEngine.playClick();
+    sendAction('set_resolution', { width: w, height: h, dpi });
+  });
 
-    // Paks Tool
-    document.getElementById('btn-paks-connect')?.addEventListener('click', () => {
-      switchTab('gfx');
-      document.getElementById('btn-connect-gameloop')?.click();
+  // GameLoop boost
+  const autoBoost = document.getElementById('chk-auto-boost');
+  if (autoBoost) {
+    autoBoost.checked = localStorage.getItem('cyperopt.autoBoost') !== '0';
+    autoBoost.addEventListener('change', () => {
+      localStorage.setItem('cyperopt.autoBoost', autoBoost.checked ? '1' : '0');
+      renderBoost();
     });
-    document.getElementById('btn-paks-refresh')?.addEventListener('click', () => { SoundEngine.playClick(); requestPaksInfo(); });
-    document.getElementById('btn-paks-open')?.addEventListener('click', () => sendAction('open_paks_folder', { package: PaksState.selected }));
-    document.getElementById('btn-paks-cancel')?.addEventListener('click', () => sendAction('cancel_paks'));
-    document.getElementById('btn-paks-pull')?.addEventListener('click', () => {
-      const game = selectedPaksGame();
-      if (!game) return;
-      if (game.backup && game.backup.exists && !confirm(t('paks.confirmReplace', { date: game.backup.date }))) return;
-      SoundEngine.playClick();
-      PaksState.busy = true;
-      PaksState.op = 'pull';
-      renderPaks();
-      sendAction('pull_paks', { package: game.package });
-    });
-    document.getElementById('btn-paks-push')?.addEventListener('click', () => {
-      const game = selectedPaksGame();
-      if (!game) return;
-      SoundEngine.playClick();
-      PaksState.busy = true;
-      PaksState.op = 'push';
-      renderPaks();
-      sendAction('push_paks', { package: game.package });
-    });
+  }
+  document.getElementById('btn-run-boost')?.addEventListener('click', () => {
+    if (Bridge.state !== 'connected' || BoostState.running) return;
+    SoundEngine.playClick();
+    sendAction('adb_boost');
+  });
+  renderBoost();
+
+  // Paks Tool
+  document.getElementById('btn-paks-connect')?.addEventListener('click', () => {
+    switchTab('gfx');
+    document.getElementById('btn-connect-gameloop')?.click();
+  });
+  document.getElementById('btn-paks-refresh')?.addEventListener('click', () => { SoundEngine.playClick(); requestPaksInfo(); });
+  document.getElementById('btn-paks-open')?.addEventListener('click', () => sendAction('open_paks_folder', { package: PaksState.selected }));
+  document.getElementById('btn-paks-cancel')?.addEventListener('click', () => sendAction('cancel_paks'));
+  document.getElementById('btn-paks-pull')?.addEventListener('click', () => {
+    const game = selectedPaksGame();
+    if (!game) return;
+    if (game.backup && game.backup.exists && !confirm(t('paks.confirmReplace', { date: game.backup.date }))) return;
+    SoundEngine.playClick();
+    PaksState.busy = true;
+    PaksState.op = 'pull';
     renderPaks();
+    sendAction('pull_paks', { package: game.package });
+  });
+  document.getElementById('btn-paks-push')?.addEventListener('click', () => {
+    const game = selectedPaksGame();
+    if (!game) return;
+    SoundEngine.playClick();
+    PaksState.busy = true;
+    PaksState.op = 'push';
+    renderPaks();
+    sendAction('push_paks', { package: game.package });
+  });
+  renderPaks();
 
-    // ModSkin Actions
-    document.getElementById('btn-modskin-add')?.addEventListener('click', () => {
-      if (isLevel2License()) {
-        showToast(t('auth.err.level2Modskin'), 'error');
-        return;
-      }
+  // ModSkin Actions
+  document.getElementById('btn-modskin-add')?.addEventListener('click', () => {
+    if (isLevel2License()) {
+      showToast(t('auth.err.level2Modskin'), 'error');
+      return;
+    }
+    SoundEngine.playClick();
+    ModSkinState.status = 'busy';
+    ModSkinState.busyKey = 'ms.injectingBadge';
+    ModSkinState.op = 'add';
+    renderModSkin();
+    appendStatusLog('modskin-log-box', 'modskin-log-item', 'busy', t('ms.log.init'));
+    sendAction('modskin_add');
+  });
+
+  document.getElementById('btn-modskin-remove')?.addEventListener('click', () => {
+    if (isLevel2License()) {
+      showToast(t('auth.err.level2Modskin'), 'error');
+      return;
+    }
+    SoundEngine.playClick();
+    ModSkinState.status = 'busy';
+    ModSkinState.busyKey = 'ms.removingBadge';
+    ModSkinState.op = 'remove';
+    renderModSkin();
+    appendStatusLog('modskin-log-box', 'modskin-log-item', 'busy', t('ms.log.wipe'));
+    sendAction('modskin_remove');
+  });
+
+  // Twitter Login Fix Listeners
+  document.getElementById('btn-twitter-apply')?.addEventListener('click', () => {
+    SoundEngine.playClick();
+    TwitterState.status = 'busy';
+    TwitterState.busyKey = 'tt.applying';
+    renderTwitter();
+    appendStatusLog('twitter-log-box', 'twitter-log-item', 'busy', t('tt.log.start'));
+    sendAction('fix_twitter_apply');
+  });
+
+  document.getElementById('btn-twitter-restore')?.addEventListener('click', () => {
+    SoundEngine.playClick();
+    TwitterState.status = 'busy';
+    TwitterState.busyKey = 'tt.restoring';
+    renderTwitter();
+    appendStatusLog('twitter-log-box', 'twitter-log-item', 'busy', t('tt.log.restore'));
+    sendAction('fix_twitter_restore');
+  });
+
+  // Fixer 32Bit Listeners
+  document.getElementById('btn-fixer32-apply')?.addEventListener('click', () => {
+    SoundEngine.playClick();
+    Fixer32State.busy = true;
+    renderFixer32();
+    const logEl = document.getElementById('fixer32-log-msg');
+    if (logEl) {
+      logEl.textContent = 'Applying 32Bit Stability Shield...';
+      logEl.className = 'twitter-log-item info';
+    }
+    sendAction('apply_hosts_fix');
+  });
+
+  document.getElementById('btn-fixer32-remove')?.addEventListener('click', () => {
+    SoundEngine.playClick();
+    Fixer32State.busy = true;
+    renderFixer32();
+    const logEl = document.getElementById('fixer32-log-msg');
+    if (logEl) {
+      logEl.textContent = 'Restoring default configuration...';
+      logEl.className = 'twitter-log-item info';
+    }
+    sendAction('remove_hosts_fix');
+  });
+
+  // Display Resolution (iPad View) Page
+  const dresInW = document.getElementById('dres-input-w');
+  const dresInH = document.getElementById('dres-input-h');
+
+  const onDimChange = () => {
+    const w = parseInt(dresInW?.value, 10) || 1440;
+    const h = parseInt(dresInH?.value, 10) || 1080;
+    DisplayResState.selectedWidth = w;
+    DisplayResState.selectedHeight = h;
+    updateDisplayResUI();
+  };
+
+  dresInW?.addEventListener('input', onDimChange);
+  dresInH?.addEventListener('input', onDimChange);
+
+  // Stepper buttons
+  document.getElementById('dres-w-up')?.addEventListener('click', () => {
+    SoundEngine.playClick();
+    DisplayResState.selectedWidth = (DisplayResState.selectedWidth || 1440) + 10;
+    updateDisplayResUI();
+  });
+  document.getElementById('dres-w-down')?.addEventListener('click', () => {
+    SoundEngine.playClick();
+    DisplayResState.selectedWidth = Math.max(640, (DisplayResState.selectedWidth || 1440) - 10);
+    updateDisplayResUI();
+  });
+  document.getElementById('dres-h-up')?.addEventListener('click', () => {
+    SoundEngine.playClick();
+    DisplayResState.selectedHeight = (DisplayResState.selectedHeight || 1080) + 10;
+    updateDisplayResUI();
+  });
+  document.getElementById('dres-h-down')?.addEventListener('click', () => {
+    SoundEngine.playClick();
+    DisplayResState.selectedHeight = Math.max(480, (DisplayResState.selectedHeight || 1080) - 10);
+    updateDisplayResUI();
+  });
+
+  // Quick chips
+  document.querySelectorAll('.dres-chip[data-set-w]').forEach(chip => {
+    chip.addEventListener('click', () => {
       SoundEngine.playClick();
-      ModSkinState.status = 'busy';
-      ModSkinState.busyKey = 'ms.injectingBadge';
-      ModSkinState.op = 'add';
-      renderModSkin();
-      appendStatusLog('modskin-log-box', 'modskin-log-item', 'busy', t('ms.log.init'));
-      sendAction('modskin_add');
-    });
-
-    document.getElementById('btn-modskin-remove')?.addEventListener('click', () => {
-      if (isLevel2License()) {
-        showToast(t('auth.err.level2Modskin'), 'error');
-        return;
-      }
-      SoundEngine.playClick();
-      ModSkinState.status = 'busy';
-      ModSkinState.busyKey = 'ms.removingBadge';
-      ModSkinState.op = 'remove';
-      renderModSkin();
-      appendStatusLog('modskin-log-box', 'modskin-log-item', 'busy', t('ms.log.wipe'));
-      sendAction('modskin_remove');
-    });
-
-    // Twitter Login Fix Listeners
-    document.getElementById('btn-twitter-apply')?.addEventListener('click', () => {
-      SoundEngine.playClick();
-      TwitterState.status = 'busy';
-      TwitterState.busyKey = 'tt.applying';
-      renderTwitter();
-      appendStatusLog('twitter-log-box', 'twitter-log-item', 'busy', t('tt.log.start'));
-      sendAction('fix_twitter_apply');
-    });
-
-    document.getElementById('btn-twitter-restore')?.addEventListener('click', () => {
-      SoundEngine.playClick();
-      TwitterState.status = 'busy';
-      TwitterState.busyKey = 'tt.restoring';
-      renderTwitter();
-      appendStatusLog('twitter-log-box', 'twitter-log-item', 'busy', t('tt.log.restore'));
-      sendAction('fix_twitter_restore');
-    });
-
-    // Fixer 32Bit Listeners
-    document.getElementById('btn-fixer32-apply')?.addEventListener('click', () => {
-      SoundEngine.playClick();
-      Fixer32State.busy = true;
-      renderFixer32();
-      const logEl = document.getElementById('fixer32-log-msg');
-      if (logEl) {
-        logEl.textContent = 'Applying 32Bit Stability Shield...';
-        logEl.className = 'twitter-log-item info';
-      }
-      sendAction('apply_hosts_fix');
-    });
-
-    document.getElementById('btn-fixer32-remove')?.addEventListener('click', () => {
-      SoundEngine.playClick();
-      Fixer32State.busy = true;
-      renderFixer32();
-      const logEl = document.getElementById('fixer32-log-msg');
-      if (logEl) {
-        logEl.textContent = 'Restoring default configuration...';
-        logEl.className = 'twitter-log-item info';
-      }
-      sendAction('remove_hosts_fix');
-    });
-
-    // Display Resolution (iPad View) Page
-    const dresInW = document.getElementById('dres-input-w');
-    const dresInH = document.getElementById('dres-input-h');
-
-    const onDimChange = () => {
-      const w = parseInt(dresInW?.value, 10) || 1440;
-      const h = parseInt(dresInH?.value, 10) || 1080;
-      DisplayResState.selectedWidth = w;
-      DisplayResState.selectedHeight = h;
+      DisplayResState.selectedWidth = parseInt(chip.dataset.setW, 10);
       updateDisplayResUI();
-    };
-
-    dresInW?.addEventListener('input', onDimChange);
-    dresInH?.addEventListener('input', onDimChange);
-
-    // Stepper buttons
-    document.getElementById('dres-w-up')?.addEventListener('click', () => {
+    });
+  });
+  document.querySelectorAll('.dres-chip[data-set-h]').forEach(chip => {
+    chip.addEventListener('click', () => {
       SoundEngine.playClick();
-      DisplayResState.selectedWidth = (DisplayResState.selectedWidth || 1440) + 10;
+      DisplayResState.selectedHeight = parseInt(chip.dataset.setH, 10);
       updateDisplayResUI();
     });
-    document.getElementById('dres-w-down')?.addEventListener('click', () => {
-      SoundEngine.playClick();
-      DisplayResState.selectedWidth = Math.max(640, (DisplayResState.selectedWidth || 1440) - 10);
-      updateDisplayResUI();
-    });
-    document.getElementById('dres-h-up')?.addEventListener('click', () => {
-      SoundEngine.playClick();
-      DisplayResState.selectedHeight = (DisplayResState.selectedHeight || 1080) + 10;
-      updateDisplayResUI();
-    });
-    document.getElementById('dres-h-down')?.addEventListener('click', () => {
-      SoundEngine.playClick();
-      DisplayResState.selectedHeight = Math.max(480, (DisplayResState.selectedHeight || 1080) - 10);
-      updateDisplayResUI();
-    });
+  });
 
-    // Quick chips
-    document.querySelectorAll('.dres-chip[data-set-w]').forEach(chip => {
-      chip.addEventListener('click', () => {
-        SoundEngine.playClick();
-        DisplayResState.selectedWidth = parseInt(chip.dataset.setW, 10);
-        updateDisplayResUI();
-      });
+  // Preset cards
+  document.querySelectorAll('.dres-preset-card').forEach(card => {
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('.dres-preset-apply-btn')) return;
+      SoundEngine.playClick();
+      DisplayResState.selectedWidth = parseInt(card.dataset.pw, 10);
+      DisplayResState.selectedHeight = parseInt(card.dataset.ph, 10);
+      updateDisplayResUI();
     });
-    document.querySelectorAll('.dres-chip[data-set-h]').forEach(chip => {
-      chip.addEventListener('click', () => {
-        SoundEngine.playClick();
-        DisplayResState.selectedHeight = parseInt(chip.dataset.setH, 10);
-        updateDisplayResUI();
-      });
-    });
-
-    // Preset cards
-    document.querySelectorAll('.dres-preset-card').forEach(card => {
-      card.addEventListener('click', (e) => {
-        if (e.target.closest('.dres-preset-apply-btn')) return;
-        SoundEngine.playClick();
+  });
+  document.querySelectorAll('.dres-preset-apply-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      SoundEngine.playClick();
+      const card = btn.closest('.dres-preset-card');
+      if (card) {
         DisplayResState.selectedWidth = parseInt(card.dataset.pw, 10);
         DisplayResState.selectedHeight = parseInt(card.dataset.ph, 10);
         updateDisplayResUI();
-      });
-    });
-    document.querySelectorAll('.dres-preset-apply-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        SoundEngine.playClick();
-        const card = btn.closest('.dres-preset-card');
-        if (card) {
-          DisplayResState.selectedWidth = parseInt(card.dataset.pw, 10);
-          DisplayResState.selectedHeight = parseInt(card.dataset.ph, 10);
-          updateDisplayResUI();
-        }
-        sendAction('set_display_res', {
-          width: DisplayResState.selectedWidth,
-          height: DisplayResState.selectedHeight,
-          hz: DisplayResState.selectedHz,
-          syncGameloop: 1,
-          launchGame: 0
-        });
-      });
-    });
-
-    // Preferred Hz checkbox
-    const chkPrefHz = document.getElementById('dres-chk-pref-hz');
-    if (chkPrefHz) {
-      chkPrefHz.checked = localStorage.getItem('cyperopt_pref_hz') !== '0';
-      chkPrefHz.addEventListener('change', () => {
-        localStorage.setItem('cyperopt_pref_hz', chkPrefHz.checked ? '1' : '0');
-      });
-    }
-
-    // Favorite preset
-    document.getElementById('dres-btn-save-fav')?.addEventListener('click', () => {
-      SoundEngine.playClick();
-      const fav = {
-        w: DisplayResState.selectedWidth,
-        h: DisplayResState.selectedHeight,
-        hz: DisplayResState.selectedHz
-      };
-      localStorage.setItem('cyperopt_dres_fav', JSON.stringify(fav));
-      showToast(`Saved ${fav.w}×${fav.h} @ ${fav.hz}Hz as favorite preset!`, 'success');
-    });
-
-    // Action buttons
-    document.getElementById('dres-btn-apply')?.addEventListener('click', () => {
-      SoundEngine.playClick();
+      }
       sendAction('set_display_res', {
         width: DisplayResState.selectedWidth,
         height: DisplayResState.selectedHeight,
         hz: DisplayResState.selectedHz,
         syncGameloop: 1,
-        launchGame: 1
+        launchGame: 0
       });
     });
-
-    document.getElementById('dres-btn-restore')?.addEventListener('click', () => {
-      SoundEngine.playClick();
-      sendAction('restore_display_res');
-    });
-
-    renderHzSelector();
-    updateDisplayResUI();
-
-    // Settings Modal & Easy Mode
-    document.getElementById('btn-settings')?.addEventListener('click', openSettingsModal);
-    document.getElementById('btn-close-settings')?.addEventListener('click', closeSettingsModal);
-    document.getElementById('settings-backdrop')?.addEventListener('click', closeSettingsModal);
-
-    const chkEasy = document.getElementById('chk-easy-mode');
-    if (chkEasy) {
-      chkEasy.addEventListener('change', (e) => {
-        SoundEngine.playClick();
-        applyEasyMode(e.target.checked, true);
-      });
-    }
-
-    document.getElementById('settings-row-easy')?.addEventListener('click', (e) => {
-      if (e.target.closest('.modern-switch')) return;
-      const chk = document.getElementById('chk-easy-mode');
-      if (chk) {
-        chk.checked = !chk.checked;
-        SoundEngine.playClick();
-        applyEasyMode(chk.checked, true);
-      }
-    });
-
-    window.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        const modal = document.getElementById('settings-modal');
-        if (modal && modal.classList.contains('open')) {
-          closeSettingsModal();
-        }
-      }
-    });
-
-    // Hero Connect Button
-    document.getElementById('btn-hero-connect-gameloop')?.addEventListener('click', () => {
-      SoundEngine.playClick();
-      autoConnectGameLoop();
-    });
-
-    // Easy Mode Dashboard Actions
-    document.getElementById('btn-easy-connect')?.addEventListener('click', () => {
-      SoundEngine.playClick();
-      autoConnectGameLoop();
-    });
-
-    document.getElementById('btn-easy-reset-guest')?.addEventListener('click', () => {
-      if (Bridge.state !== 'connected') {
-        showToast(t('bridge.connectFirst'), 'error');
-        autoConnectGameLoop();
-        return;
-      }
-      SoundEngine.playClick();
-      const btn = document.getElementById('btn-easy-reset-guest');
-      if (btn) btn.classList.add('is-busy');
-      EasyActionModal.open(
-        'reset_guest',
-        t('easy.modal.resetGuestTitle'),
-        t('easy.modal.resetGuestDesc'),
-        '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="19" y1="8" x2="19" y2="14"></line><line x1="22" y1="11" x2="16" y2="11"></line>'
-      );
-      sendAction('reset_guest');
-    });
-
-    document.getElementById('btn-easy-fix-twitter')?.addEventListener('click', () => {
-      SoundEngine.playClick();
-      TwitterState.status = 'busy';
-      TwitterState.busyKey = 'tt.applying';
-      renderTwitter();
-      EasyActionModal.open(
-        'fix_twitter',
-        t('easy.modal.twitterTitle'),
-        t('easy.modal.twitterDesc'),
-        '<path d="M23 3a10.9 10.9 0 0 1-3.14 1.53 4.48 4.48 0 0 0-7.86 3v1A10.66 10.66 0 0 1 3 4s-4 9 5 13a11.64 11.64 0 0 1-7 2c9 5 20 0 20-11.5a4.5 4.5 0 0 0-.08-.83A7.72 7.72 0 0 0 23 3z"></path>'
-      );
-      sendAction('fix_twitter_apply');
-    });
-
-    document.getElementById('btn-easy-modskin')?.addEventListener('click', () => {
-      if (isLevel2License()) {
-        showToast(t('auth.err.level2Modskin'), 'error');
-        return;
-      }
-      SoundEngine.playClick();
-      ModSkinState.status = 'busy';
-      ModSkinState.busyKey = 'ms.injectingBadge';
-      ModSkinState.op = 'add';
-      renderModSkin();
-      EasyActionModal.open(
-        'modskin',
-        t('easy.modal.modskinTitle'),
-        t('easy.modal.modskinDesc'),
-        '<path d="M12 2L2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"></path>'
-      );
-      sendAction('modskin_add');
-    });
-
-    // Action Loading Modal Close handlers
-    document.getElementById('btn-close-easy-loading')?.addEventListener('click', () => {
-      SoundEngine.playClick();
-      EasyActionModal.close();
-    });
-    document.getElementById('easy-loading-backdrop')?.addEventListener('click', () => {
-      if (EasyActionModal.currentOp && document.getElementById('easy-loading-actions')?.hidden === false) {
-        EasyActionModal.close();
-      }
-    });
-
-    document.getElementById('btn-easy-ipad-view')?.addEventListener('click', () => {
-      SoundEngine.playClick();
-      // Temporary Advanced Mode for this session:
-      // DO NOT change localStorage ('cyperopt_easy_mode' remains '1')
-      EasyModeState.enabled = false;
-      document.body.classList.remove('is-easy-mode');
-
-      // Show all tabs in sidebar
-      document.querySelectorAll('.menu-tab').forEach(tab => {
-        tab.style.display = '';
-      });
-
-      // Enforce license level restrictions (e.g. keep ModSkin hidden for Level 2)
-      applyLicenseLevelPermissions();
-
-      // Hide easy mode badge in header
-      const badge = document.getElementById('header-easy-badge');
-      if (badge) badge.style.display = 'none';
-
-      // Navigate to iPad view tab (display-res)
-      switchTab('display-res');
-      showToast(t('easy.tempAdvancedToast'), 'info');
-    });
-
-    // Load saved Easy Mode state (Cyber Cafe mode)
-    applyEasyMode(localStorage.getItem('cyperopt_easy_mode') === '1');
-
-    // Everything else waits for the license check
-    sendAction('auth_status');
   });
+
+  // Preferred Hz checkbox
+  const chkPrefHz = document.getElementById('dres-chk-pref-hz');
+  if (chkPrefHz) {
+    chkPrefHz.checked = localStorage.getItem('cyperopt_pref_hz') !== '0';
+    chkPrefHz.addEventListener('change', () => {
+      localStorage.setItem('cyperopt_pref_hz', chkPrefHz.checked ? '1' : '0');
+    });
+  }
+
+  // Favorite preset
+  document.getElementById('dres-btn-save-fav')?.addEventListener('click', () => {
+    SoundEngine.playClick();
+    const fav = {
+      w: DisplayResState.selectedWidth,
+      h: DisplayResState.selectedHeight,
+      hz: DisplayResState.selectedHz
+    };
+    localStorage.setItem('cyperopt_dres_fav', JSON.stringify(fav));
+    showToast(`Saved ${fav.w}×${fav.h} @ ${fav.hz}Hz as favorite preset!`, 'success');
+  });
+
+  // Action buttons
+  document.getElementById('dres-btn-apply')?.addEventListener('click', () => {
+    SoundEngine.playClick();
+    sendAction('set_display_res', {
+      width: DisplayResState.selectedWidth,
+      height: DisplayResState.selectedHeight,
+      hz: DisplayResState.selectedHz,
+      syncGameloop: 1,
+      launchGame: 1
+    });
+  });
+
+  document.getElementById('dres-btn-restore')?.addEventListener('click', () => {
+    SoundEngine.playClick();
+    sendAction('restore_display_res');
+  });
+
+  renderHzSelector();
+  updateDisplayResUI();
+
+  // Settings Modal & Easy Mode
+  document.getElementById('btn-settings')?.addEventListener('click', openSettingsModal);
+  document.getElementById('btn-close-settings')?.addEventListener('click', closeSettingsModal);
+  document.getElementById('settings-backdrop')?.addEventListener('click', closeSettingsModal);
+
+  const chkEasy = document.getElementById('chk-easy-mode');
+  if (chkEasy) {
+    chkEasy.addEventListener('change', (e) => {
+      SoundEngine.playClick();
+      applyEasyMode(e.target.checked, true);
+    });
+  }
+
+  document.getElementById('settings-row-easy')?.addEventListener('click', (e) => {
+    if (e.target.closest('.modern-switch')) return;
+    const chk = document.getElementById('chk-easy-mode');
+    if (chk) {
+      chk.checked = !chk.checked;
+      SoundEngine.playClick();
+      applyEasyMode(chk.checked, true);
+    }
+  });
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      const modal = document.getElementById('settings-modal');
+      if (modal && modal.classList.contains('open')) {
+        closeSettingsModal();
+      }
+    }
+  });
+
+  // Hero Connect Button
+  document.getElementById('btn-hero-connect-gameloop')?.addEventListener('click', () => {
+    SoundEngine.playClick();
+    autoConnectGameLoop();
+  });
+
+  // Easy Mode Dashboard Actions
+  document.getElementById('btn-easy-connect')?.addEventListener('click', () => {
+    SoundEngine.playClick();
+    autoConnectGameLoop();
+  });
+
+  document.getElementById('btn-easy-reset-guest')?.addEventListener('click', () => {
+    if (Bridge.state !== 'connected') {
+      showToast(t('bridge.connectFirst'), 'error');
+      autoConnectGameLoop();
+      return;
+    }
+    SoundEngine.playClick();
+    const btn = document.getElementById('btn-easy-reset-guest');
+    if (btn) btn.classList.add('is-busy');
+    EasyActionModal.open(
+      'reset_guest',
+      t('easy.modal.resetGuestTitle'),
+      t('easy.modal.resetGuestDesc'),
+      '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="19" y1="8" x2="19" y2="14"></line><line x1="22" y1="11" x2="16" y2="11"></line>'
+    );
+    sendAction('reset_guest');
+  });
+
+  document.getElementById('btn-easy-fix-twitter')?.addEventListener('click', () => {
+    SoundEngine.playClick();
+    TwitterState.status = 'busy';
+    TwitterState.busyKey = 'tt.applying';
+    renderTwitter();
+    EasyActionModal.open(
+      'fix_twitter',
+      t('easy.modal.twitterTitle'),
+      t('easy.modal.twitterDesc'),
+      '<path d="M23 3a10.9 10.9 0 0 1-3.14 1.53 4.48 4.48 0 0 0-7.86 3v1A10.66 10.66 0 0 1 3 4s-4 9 5 13a11.64 11.64 0 0 1-7 2c9 5 20 0 20-11.5a4.5 4.5 0 0 0-.08-.83A7.72 7.72 0 0 0 23 3z"></path>'
+    );
+    sendAction('fix_twitter_apply');
+  });
+
+  document.getElementById('btn-easy-modskin')?.addEventListener('click', () => {
+    if (isLevel2License()) {
+      showToast(t('auth.err.level2Modskin'), 'error');
+      return;
+    }
+    SoundEngine.playClick();
+    ModSkinState.status = 'busy';
+    ModSkinState.busyKey = 'ms.injectingBadge';
+    ModSkinState.op = 'add';
+    renderModSkin();
+    EasyActionModal.open(
+      'modskin',
+      t('easy.modal.modskinTitle'),
+      t('easy.modal.modskinDesc'),
+      '<path d="M12 2L2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"></path>'
+    );
+    sendAction('modskin_add');
+  });
+
+  // Action Loading Modal Close handlers
+  document.getElementById('btn-close-easy-loading')?.addEventListener('click', () => {
+    SoundEngine.playClick();
+    EasyActionModal.close();
+  });
+  document.getElementById('easy-loading-backdrop')?.addEventListener('click', () => {
+    if (EasyActionModal.currentOp && document.getElementById('easy-loading-actions')?.hidden === false) {
+      EasyActionModal.close();
+    }
+  });
+
+  document.getElementById('btn-easy-ipad-view')?.addEventListener('click', () => {
+    SoundEngine.playClick();
+    // Temporary Advanced Mode for this session:
+    // DO NOT change localStorage ('cyperopt_easy_mode' remains '1')
+    EasyModeState.enabled = false;
+    document.body.classList.remove('is-easy-mode');
+
+    // Show all tabs in sidebar
+    document.querySelectorAll('.menu-tab').forEach(tab => {
+      tab.style.display = '';
+    });
+
+    // Enforce license level restrictions (e.g. keep ModSkin hidden for Level 2)
+    applyLicenseLevelPermissions();
+
+    // Hide easy mode badge in header
+    const badge = document.getElementById('header-easy-badge');
+    if (badge) badge.style.display = 'none';
+
+    // Navigate to iPad view tab (display-res)
+    switchTab('display-res');
+    showToast(t('easy.tempAdvancedToast'), 'info');
+  });
+
+  // Load saved Easy Mode state (Cyber Cafe mode)
+  applyEasyMode(localStorage.getItem('cyperopt_easy_mode') === '1');
+
+  // Everything else waits for the license check
+  sendAction('auth_status');
+});
