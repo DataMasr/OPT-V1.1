@@ -6692,3 +6692,239 @@ body.is-easy-mode .easy-dashboard {
   0% { transform: scale(0.4); opacity: 0; }
   100% { transform: scale(1); opacity: 1; }
 }
+
+/* ==========================================================
+   Roblox Vpn Tab & Modern Hub
+   ========================================================== */
+.rvpn-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 780px;
+  margin: 0 auto;
+}
+
+.rvpn-main-card {
+  border-color: rgba(16, 185, 129, 0.25);
+  background: linear-gradient(180deg, rgba(16, 185, 129, 0.04) 0%, rgba(15, 23, 42, 0.6) 100%), var(--surface-1);
+  padding: 28px;
+  border-radius: 20px;
+  position: relative;
+  overflow: hidden;
+}
+
+.rvpn-main-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(16, 185, 129, 0.6), transparent);
+}
+
+.rvpn-header {
+  margin-bottom: 24px;
+}
+
+.rvpn-hero-hub {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 36px 20px;
+  background: rgba(10, 15, 29, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 16px;
+  margin-bottom: 24px;
+  position: relative;
+}
+
+.rvpn-status-circle {
+  width: 130px;
+  height: 130px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.08) 0%, rgba(10, 15, 29, 0.8) 70%);
+  border: 2px solid rgba(16, 185, 129, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  margin-bottom: 18px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.rvpn-circle-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+}
+
+.rvpn-circle-icon {
+  width: 38px;
+  height: 38px;
+  color: #10b981;
+  filter: drop-shadow(0 0 10px rgba(16, 185, 129, 0.4));
+  transition: all 0.3s ease;
+}
+
+.rvpn-circle-ping {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #38bdf8;
+  margin-top: 4px;
+}
+
+.rvpn-status-circle.is-connected {
+  border-color: #10b981;
+  box-shadow: 0 0 35px rgba(16, 185, 129, 0.4), inset 0 0 20px rgba(16, 185, 129, 0.2);
+}
+
+.rvpn-status-circle.is-connected .rvpn-circle-icon {
+  color: #34d399;
+  filter: drop-shadow(0 0 15px rgba(52, 211, 153, 0.8));
+}
+
+.rvpn-status-circle.is-busy {
+  border-color: #f59e0b;
+  box-shadow: 0 0 25px rgba(245, 158, 11, 0.3);
+  animation: rvpnPulse 1.5s infinite;
+}
+
+.rvpn-status-circle.is-busy .rvpn-circle-icon {
+  color: #f59e0b;
+}
+
+@keyframes rvpnPulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.04); }
+  100% { transform: scale(1); }
+}
+
+.rvpn-hero-status {
+  text-align: center;
+}
+
+.rvpn-status-headline {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #f1f5f9;
+  margin-bottom: 6px;
+  transition: all 0.2s ease;
+}
+
+.rvpn-status-headline[data-status="applied"] {
+  color: #34d399;
+  text-shadow: 0 0 16px rgba(52, 211, 153, 0.5);
+}
+
+.rvpn-status-headline[data-status="busy"] {
+  color: #fbbf24;
+}
+
+.rvpn-status-headline[data-status="error"] {
+  color: #f87171;
+}
+
+.rvpn-status-sub {
+  font-size: 0.85rem;
+  color: var(--text-tertiary);
+  max-width: 480px;
+  line-height: 1.4;
+}
+
+.rvpn-stats-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.rvpn-stat-box {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.rvpn-stat-box:hover {
+  border-color: rgba(16, 185, 129, 0.3);
+  background: rgba(16, 185, 129, 0.03);
+}
+
+.rvpn-stat-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-tertiary);
+}
+
+.rvpn-stat-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: #f1f5f9;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rvpn-stat-value.accent-green {
+  color: #34d399;
+}
+
+.rvpn-stat-value.accent-cyan {
+  color: #38bdf8;
+}
+
+.rvpn-actions-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.rvpn-toggle-btn {
+  padding: 14px 36px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  box-shadow: 0 4px 20px rgba(16, 185, 129, 0.4);
+  transition: all 0.2s ease;
+}
+
+.rvpn-toggle-btn:hover {
+  background: linear-gradient(135deg, #34d399 0%, #10b981 100%);
+  box-shadow: 0 6px 25px rgba(16, 185, 129, 0.6);
+  transform: translateY(-1px);
+}
+
+.rvpn-toggle-btn.is-danger {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
+  box-shadow: 0 4px 20px rgba(239, 68, 68, 0.4) !important;
+}
+
+.rvpn-toggle-btn.is-danger:hover {
+  background: linear-gradient(135deg, #f87171 0%, #ef4444 100%) !important;
+  box-shadow: 0 6px 25px rgba(239, 68, 68, 0.6) !important;
+}
+
+.rvpn-ping-btn {
+  padding: 14px 24px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  border-radius: 12px;
+}

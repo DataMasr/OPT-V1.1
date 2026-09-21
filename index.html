@@ -626,6 +626,30 @@
                   </svg>
                 </div>
               </button>
+
+              <!-- 6. Roblox Vpn -->
+              <button class="easy-card" id="btn-easy-roblox-vpn" type="button">
+                <div class="easy-card-icon icon-emerald">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                    <polyline points="9 12 11 14 15 10"></polyline>
+                  </svg>
+                </div>
+                <div class="easy-card-content">
+                  <div class="easy-card-title-row">
+                    <span class="easy-card-title" data-i18n="easy.btnRobloxVpn">Roblox Vpn</span>
+                    <span class="easy-status-pill" id="easy-rvpn-status" data-i18n="rvpn.disconnected">Offline</span>
+                  </div>
+                  <p class="easy-card-desc" data-i18n="easy.descRobloxVpn">Dedicated gaming tunnel &amp; ping optimizer for Roblox</p>
+                </div>
+                <div class="easy-card-arrow">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+                    stroke-linejoin="round">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                  </svg>
+                </div>
+              </button>
             </div>
           </div>
 
@@ -2717,9 +2741,10 @@
 
         <!-- ==================== TAB 10: ROBLOX VPN ==================== -->
         <div class="tab-view" id="tab-roblox-vpn">
-          <div class="twitter-container">
-            <div class="panel-card twitter-card">
-              <div class="panel-header">
+          <div class="rvpn-layout">
+            <div class="panel-card rvpn-main-card">
+              <!-- Top Header -->
+              <div class="panel-header rvpn-header">
                 <div class="panel-icon icon-emerald">
                   <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"
                     stroke-linecap="round" stroke-linejoin="round">
@@ -2728,67 +2753,63 @@
                   </svg>
                 </div>
                 <div>
-                  <h3 data-i18n="rvpn.title">Roblox Vpn (مسارع وبوت روبلوكس المخصص)</h3>
-                  <span class="panel-subtitle" data-i18n="rvpn.sub">نفق اتصال مباشر ومسار سريع لسيرفر ألمانيا لتسريع لعبة روبلوكس وتخفيض البنج</span>
+                  <h3 data-i18n="rvpn.title">Roblox Vpn</h3>
+                  <span class="panel-subtitle" data-i18n="rvpn.sub">Dedicated low-latency gaming tunnel &amp; ping optimizer for Roblox</span>
                 </div>
               </div>
 
-              <!-- Status Card -->
-              <div class="twitter-info-grid">
-                <div class="twitter-info-item">
-                  <span class="twitter-info-label" data-i18n="rvpn.serverLocation">موقع السيرفر</span>
-                  <div class="twitter-info-value"
-                    style="font-family: var(--font-mono); font-size: 0.85rem; color: var(--accent);">🇩🇪 Falkenstein, Germany (167.235.10.203)</div>
+              <!-- Main Hero Hub -->
+              <div class="rvpn-hero-hub">
+                <div class="rvpn-status-circle" id="rvpn-circle-indicator">
+                  <div class="rvpn-circle-inner">
+                    <svg class="rvpn-circle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                      <polyline points="9 12 11 14 15 10"></polyline>
+                    </svg>
+                    <div class="rvpn-circle-ping" id="rvpn-ping-val">-- ms</div>
+                  </div>
                 </div>
-                <div class="twitter-info-item">
-                  <span class="twitter-info-label" data-i18n="rvpn.tunnelMode">نوع النفق (Tunneling)</span>
-                  <div class="twitter-info-value"
-                    style="font-family: var(--font-mono); font-size: 0.85rem; color: #34d399;">Split-Tunneling (Roblox Only)</div>
-                </div>
-                <div class="twitter-info-item">
-                  <span class="twitter-info-label" data-i18n="rvpn.serverPing">سرعة الاستجابة (Ping)</span>
-                  <div class="twitter-info-value" id="rvpn-ping-val"
-                    style="font-family: var(--font-mono); font-size: 0.95rem; font-weight: 700; color: #38bdf8;">-- ms</div>
-                </div>
-                <div class="twitter-info-item">
-                  <span class="twitter-info-label" data-i18n="rvpn.statusLabel">Current Status</span>
-                  <div class="twitter-badge" id="rvpn-status-badge" data-status="ready" data-i18n="rvpn.disconnected">
-                    غير متصل (Disconnected)</div>
+
+                <div class="rvpn-hero-status">
+                  <div class="rvpn-status-headline" id="rvpn-status-badge" data-status="ready" data-i18n="rvpn.disconnected">Disconnected</div>
+                  <div class="rvpn-status-sub" id="rvpn-log-msg" data-i18n="rvpn.logReady">Click "Connect Roblox Vpn" to activate.</div>
                 </div>
               </div>
 
-              <!-- Steps Guide -->
-              <div class="twitter-steps-guide">
-                <div class="twitter-step-item">
-                  <div class="step-num">⚡</div>
-                  <div class="step-text" data-i18n-html="rvpn.splitInfo"><strong>تقنية Split-Tunneling الذكية:</strong> يتم توجيه حزم لعبة Roblox (مثل RobloxPlayerBeta.exe) فقط عبر السيرفر الألماني فائق السرعة، بينما يظل باقي استخدام جهازك (تصفح، ديسكورد، يوتيوب، ألعاب أخرى) عبر اتصالك الطبيعي تماماً وبدون أي بطء.</div>
+              <!-- Minimal Stats Row (No long text) -->
+              <div class="rvpn-stats-row">
+                <div class="rvpn-stat-box">
+                  <span class="rvpn-stat-label" data-i18n="rvpn.serverLocation">Server Location</span>
+                  <span class="rvpn-stat-value">🇩🇪 Falkenstein, Germany</span>
+                </div>
+                <div class="rvpn-stat-box">
+                  <span class="rvpn-stat-label" data-i18n="rvpn.tunnelMode">Routing Mode</span>
+                  <span class="rvpn-stat-value accent-green">Split-Tunnel (Roblox Only)</span>
+                </div>
+                <div class="rvpn-stat-box">
+                  <span class="rvpn-stat-label" data-i18n="rvpn.serverPing">Latency (Ping)</span>
+                  <span class="rvpn-stat-value accent-cyan" id="rvpn-stat-ping">-- ms</span>
                 </div>
               </div>
 
-              <!-- Actions Bar -->
-              <div class="twitter-actions">
-                <button class="btn-primary-action" id="btn-roblox-vpn-toggle" type="button" style="padding: 14px 28px;">
-                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+              <!-- Action Controls -->
+              <div class="rvpn-actions-wrap">
+                <button class="btn-primary-action rvpn-toggle-btn" id="btn-roblox-vpn-toggle" type="button">
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"
                     stroke-linecap="round" stroke-linejoin="round">
                     <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
                     <line x1="12" y1="2" x2="12" y2="12"></line>
                   </svg>
-                  <span id="rvpn-toggle-label" data-i18n="rvpn.btnConnect">اتصال Roblox Vpn</span>
+                  <span id="rvpn-toggle-label" data-i18n="rvpn.btnConnect">Connect Roblox Vpn</span>
                 </button>
 
-                <button class="btn-secondary-action" id="btn-roblox-vpn-ping" type="button"
-                  style="padding: 14px 24px;">
+                <button class="btn-secondary-action rvpn-ping-btn" id="btn-roblox-vpn-ping" type="button">
                   <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
                     stroke-linecap="round" stroke-linejoin="round">
                     <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
                   </svg>
-                  <span data-i18n="rvpn.btnPing">فحص البنج (Ping)</span>
+                  <span data-i18n="rvpn.btnPing">Test Ping</span>
                 </button>
-              </div>
-
-              <!-- Logs Box -->
-              <div class="twitter-log-box" id="roblox-vpn-log-box">
-                <div class="twitter-log-item info" id="rvpn-log-msg" data-i18n="rvpn.logReady">جاهز للاتصال. اضغط "اتصال Roblox Vpn" لتفعيل المسار المباشر لروبلوكس.</div>
               </div>
 
             </div>

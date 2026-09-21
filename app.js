@@ -2214,9 +2214,17 @@ function handleRobloxVpnStatus(msg) {
 function renderRobloxVpn() {
   const badge = document.getElementById('rvpn-status-badge');
   const pingVal = document.getElementById('rvpn-ping-val');
+  const statPing = document.getElementById('rvpn-stat-ping');
   const btnToggle = document.getElementById('btn-roblox-vpn-toggle');
   const toggleLabel = document.getElementById('rvpn-toggle-label');
   const btnPing = document.getElementById('btn-roblox-vpn-ping');
+  const circle = document.getElementById('rvpn-circle-indicator');
+  const easyStatus = document.getElementById('easy-rvpn-status');
+
+  if (circle) {
+    circle.classList.toggle('is-connected', RobloxVpnState.status === 'connected');
+    circle.classList.toggle('is-busy', RobloxVpnState.status === 'connecting' || RobloxVpnState.status === 'disconnecting');
+  }
 
   if (badge) {
     if (RobloxVpnState.status === 'connected') {
@@ -2237,15 +2245,32 @@ function renderRobloxVpn() {
     }
   }
 
-  if (pingVal) {
+  const formatPing = (el) => {
+    if (!el) return;
     if (RobloxVpnState.ping >= 0) {
-      pingVal.textContent = `${RobloxVpnState.ping} ms`;
-      if (RobloxVpnState.ping < 80) pingVal.style.color = '#34d399';
-      else if (RobloxVpnState.ping < 140) pingVal.style.color = '#fbbf24';
-      else pingVal.style.color = '#f87171';
+      el.textContent = `${RobloxVpnState.ping} ms`;
+      if (RobloxVpnState.ping < 80) el.style.color = '#34d399';
+      else if (RobloxVpnState.ping < 140) el.style.color = '#fbbf24';
+      else el.style.color = '#f87171';
     } else {
-      pingVal.textContent = '-- ms';
-      pingVal.style.color = '#38bdf8';
+      el.textContent = '-- ms';
+      el.style.color = '#38bdf8';
+    }
+  };
+
+  formatPing(pingVal);
+  formatPing(statPing);
+
+  if (easyStatus) {
+    if (RobloxVpnState.status === 'connected') {
+      easyStatus.dataset.state = 'connected';
+      easyStatus.textContent = RobloxVpnState.ping >= 0 ? `${t('rvpn.connected')} (${RobloxVpnState.ping}ms)` : t('rvpn.connected');
+    } else if (RobloxVpnState.status === 'connecting' || RobloxVpnState.status === 'disconnecting') {
+      easyStatus.dataset.state = 'busy';
+      easyStatus.textContent = t('rvpn.' + RobloxVpnState.status);
+    } else {
+      easyStatus.dataset.state = 'idle';
+      easyStatus.textContent = t('rvpn.disconnected');
     }
   }
 
@@ -2270,7 +2295,7 @@ function renderRobloxVpn() {
 // ----------------------------------------------------------
 const EasyModeState = {
   enabled: false,
-  allowedTabs: ['home']
+  allowedTabs: ['home', 'roblox-vpn']
 };
 
 function autoConnectGameLoop() {
@@ -2322,8 +2347,8 @@ function applyEasyMode(enabled, showNotification = false) {
     }
   });
 
-  // If current active tab is not home in Easy Mode, switch to home
-  if (EasyModeState.enabled && currentTab !== 'home') {
+  // If current active tab is not in allowedTabs in Easy Mode, switch to home
+  if (EasyModeState.enabled && !EasyModeState.allowedTabs.includes(currentTab)) {
     switchTab('home');
   }
 
@@ -3299,6 +3324,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // Navigate to iPad view tab (display-res)
     switchTab('display-res');
     showToast(t('easy.tempAdvancedToast'), 'info');
+  });
+
+  document.getElementById('btn-easy-roblox-vpn')?.addEventListener('click', () => {
+    SoundEngine.playClick();
+    switchTab('roblox-vpn');
   });
 
   // Load saved Easy Mode state (Cyber Cafe mode)
