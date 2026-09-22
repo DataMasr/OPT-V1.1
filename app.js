@@ -108,8 +108,8 @@ function renderTabHeader() {
 
 // Switch Tab
 function switchTab(tabId, silent) {
-  if (tabId === 'modskin' && isLevel2License()) {
-    showToast(t('auth.err.level2Modskin'), 'error');
+  if ((tabId === 'modskin' || tabId === 'memory') && isLevel2License()) {
+    showToast(tabId === 'memory' ? t('auth.err.level2Memory') : t('auth.err.level2Modskin'), 'error');
     return;
   }
   if (!silent) SoundEngine.playClick();
@@ -551,10 +551,27 @@ function applyLicenseLevelPermissions() {
     }
   }
 
+  const memoryTabBtn = document.querySelector('.menu-tab[data-tab="memory"]');
+  if (memoryTabBtn) {
+    if (isL2) {
+      memoryTabBtn.style.display = 'none';
+      memoryTabBtn.hidden = true;
+    } else if (!EasyModeState.enabled) {
+      memoryTabBtn.style.display = '';
+      memoryTabBtn.hidden = false;
+    }
+  }
+
   const modskinTile = document.querySelector('.tool-tile[data-tab="modskin"]');
   if (modskinTile) {
     modskinTile.style.display = isL2 ? 'none' : '';
     modskinTile.hidden = isL2;
+  }
+
+  const memoryTile = document.querySelector('.tool-tile[data-tab="memory"]');
+  if (memoryTile) {
+    memoryTile.style.display = isL2 ? 'none' : '';
+    memoryTile.hidden = isL2;
   }
 
   const easyModskinBtn = document.getElementById('btn-easy-modskin');
@@ -566,6 +583,11 @@ function applyLicenseLevelPermissions() {
   if (isL2 && currentTab === 'modskin') {
     switchTab('home', true);
     showToast(t('auth.err.level2Modskin'), 'error');
+  }
+
+  if (isL2 && currentTab === 'memory') {
+    switchTab('home', true);
+    showToast(t('auth.err.level2Memory'), 'error');
   }
 
   const tierBadge = document.getElementById('license-tier-badge');
@@ -1246,6 +1268,8 @@ function handleNativeMessage(data) {
       handlePaksStatus(msg);
     } else if (action === 'modskin_status') {
       handleModSkinStatus(msg);
+    } else if (action === 'memory_status') {
+      handleMemoryStatus(msg);
     } else if (action === 'twitter_status') {
       handleTwitterStatus(msg);
     } else if (action === 'hosts_fix_status') {
@@ -2080,6 +2104,54 @@ function handleModSkinStatus(msg) {
   }
 }
 
+// ----------------------------------------------------------
+// Memory Manager (badge, buttons, log)
+// ----------------------------------------------------------
+const MemoryState = { status: 'ready', busyKey: 'mem.working', op: '' };
+
+function renderMemory() {
+  const badge = document.getElementById('memory-status-badge');
+  const btnAdd = document.getElementById('btn-memory-add');
+  const btnRemove = document.getElementById('btn-memory-remove');
+  const status = MemoryState.status;
+  const isBusy = status === 'busy';
+
+  if (badge) {
+    badge.dataset.status = status;
+    badge.textContent = isBusy ? t(MemoryState.busyKey)
+      : status === 'success' ? t('mem.active')
+        : status === 'removed' ? t('mem.removed')
+          : status === 'error' ? t('mem.error') : t('mem.ready');
+  }
+  if (btnAdd) {
+    btnAdd.disabled = isBusy;
+    btnAdd.classList.toggle('is-busy', isBusy && MemoryState.op === 'add');
+    const label = btnAdd.querySelector('span');
+    if (label) label.textContent = isBusy && MemoryState.op === 'add' ? t('mem.injecting') : t('mem.add');
+  }
+  if (btnRemove) {
+    btnRemove.disabled = isBusy;
+    btnRemove.classList.toggle('is-busy', isBusy && MemoryState.op === 'remove');
+  }
+}
+
+function handleMemoryStatus(msg) {
+  MemoryState.status = msg.status || 'ready';
+  if (MemoryState.status === 'busy') MemoryState.busyKey = 'mem.working';
+  else MemoryState.op = '';
+  renderMemory();
+
+  appendStatusLog('memory-log-box', 'modskin-log-item', msg.status, msg.message);
+
+  if (msg.status === 'success') {
+    showToast(msg.message || t('mem.toast.ok'), 'success');
+  } else if (msg.status === 'removed') {
+    showToast(msg.message || t('mem.toast.removed'), 'info');
+  } else if (msg.status === 'error') {
+    showToast(msg.message || t('mem.toast.err'), 'error');
+  }
+}
+
 function renderTwitter() {
   const badge = document.getElementById('twitter-status-badge');
   const btnApply = document.getElementById('btn-twitter-apply');
@@ -2249,8 +2321,8 @@ function renderRobloxVpn() {
     if (!el) return;
     if (RobloxVpnState.ping >= 0) {
       el.textContent = `${RobloxVpnState.ping} ms`;
-      if (RobloxVpnState.ping < 80) el.style.color = '#34d399';
-      else if (RobloxVpnState.ping < 140) el.style.color = '#fbbf24';
+      if (RobloxVpnState.ping < 100) el.style.color = '#34d399';
+      else if (RobloxVpnState.ping < 160) el.style.color = '#fbbf24';
       else el.style.color = '#f87171';
     } else {
       el.textContent = '-- ms';
@@ -2551,6 +2623,7 @@ function rerenderAll() {
   renderSavedResolutions();
   renderGameSync();
   renderModSkin();
+  renderMemory();
   renderTwitter();
   renderFixer32();
   updateDisplayResUI();
@@ -2993,6 +3066,35 @@ document.addEventListener('DOMContentLoaded', () => {
     renderModSkin();
     appendStatusLog('modskin-log-box', 'modskin-log-item', 'busy', t('ms.log.wipe'));
     sendAction('modskin_remove');
+  });
+
+  // Memory Actions
+  document.getElementById('btn-memory-add')?.addEventListener('click', () => {
+    if (isLevel2License()) {
+      showToast(t('auth.err.level2Memory'), 'error');
+      return;
+    }
+    SoundEngine.playClick();
+    MemoryState.status = 'busy';
+    MemoryState.busyKey = 'mem.injectingBadge';
+    MemoryState.op = 'add';
+    renderMemory();
+    appendStatusLog('memory-log-box', 'modskin-log-item', 'busy', t('mem.log.init'));
+    sendAction('memory_add');
+  });
+
+  document.getElementById('btn-memory-remove')?.addEventListener('click', () => {
+    if (isLevel2License()) {
+      showToast(t('auth.err.level2Memory'), 'error');
+      return;
+    }
+    SoundEngine.playClick();
+    MemoryState.status = 'busy';
+    MemoryState.busyKey = 'mem.removingBadge';
+    MemoryState.op = 'remove';
+    renderMemory();
+    appendStatusLog('memory-log-box', 'modskin-log-item', 'busy', t('mem.log.wipe'));
+    sendAction('memory_remove');
   });
 
   // Twitter Login Fix Listeners

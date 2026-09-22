@@ -335,6 +335,26 @@
           <span class="tag-pill tag-pill-violet" data-i18n="nav.new">NEW</span>
         </button>
 
+        <button class="menu-tab" data-tab="memory">
+          <span class="tab-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round">
+              <rect x="4" y="4" width="16" height="16" rx="2"></rect>
+              <rect x="9" y="9" width="6" height="6"></rect>
+              <line x1="9" y1="1" x2="9" y2="4"></line>
+              <line x1="15" y1="1" x2="15" y2="4"></line>
+              <line x1="9" y1="20" x2="9" y2="23"></line>
+              <line x1="15" y1="20" x2="15" y2="23"></line>
+              <line x1="20" y1="9" x2="23" y2="9"></line>
+              <line x1="20" y1="14" x2="23" y2="14"></line>
+              <line x1="1" y1="9" x2="4" y2="9"></line>
+              <line x1="1" y1="14" x2="4" y2="14"></line>
+            </svg>
+          </span>
+          <span class="tab-label" data-i18n="nav.memory">Memory</span>
+          <span class="tag-pill tag-pill-emerald" data-i18n="nav.new">NEW</span>
+        </button>
+
         <button class="menu-tab" data-tab="twitter">
           <span class="tab-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
@@ -1014,6 +1034,28 @@
                     <span class="tool-text">
                       <span class="tool-name" data-i18n="nav.modskin">ModSkin</span>
                       <span class="tool-sub" data-i18n="dash.t.modskin">Custom skin patches</span>
+                    </span>
+                  </button>
+
+                  <button class="tool-tile" data-tab="memory" type="button" onclick="switchTab('memory')">
+                    <span class="tool-icon icon-emerald">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <rect x="4" y="4" width="16" height="16" rx="2"></rect>
+                        <rect x="9" y="9" width="6" height="6"></rect>
+                        <line x1="9" y1="1" x2="9" y2="4"></line>
+                        <line x1="15" y1="1" x2="15" y2="4"></line>
+                        <line x1="9" y1="20" x2="9" y2="23"></line>
+                        <line x1="15" y1="20" x2="15" y2="23"></line>
+                        <line x1="20" y1="9" x2="23" y2="9"></line>
+                        <line x1="20" y1="14" x2="23" y2="14"></line>
+                        <line x1="1" y1="9" x2="4" y2="9"></line>
+                        <line x1="1" y1="14" x2="4" y2="14"></line>
+                      </svg>
+                    </span>
+                    <span class="tool-text">
+                      <span class="tool-name" data-i18n="nav.memory">Memory</span>
+                      <span class="tool-sub" data-i18n="dash.t.memory">Deploy memory patch</span>
                     </span>
                   </button>
 
@@ -2576,6 +2618,71 @@
               <div class="modskin-log-box" id="modskin-log-box">
                 <div class="modskin-log-item info" data-i18n="ms.log.ready">Ready. Click &quot;Add ModSkin&quot; to
                   download from server and inject into GameLoop.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ==================== TAB: MEMORY ==================== -->
+        <div class="tab-view" id="tab-memory">
+          <div class="modskin-container">
+            <div class="panel-card modskin-card">
+              <div class="panel-header">
+                <div class="panel-icon icon-emerald">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round">
+                    <rect x="4" y="4" width="16" height="16" rx="2"></rect>
+                    <rect x="9" y="9" width="6" height="6"></rect>
+                    <line x1="9" y1="1" x2="9" y2="4"></line>
+                    <line x1="15" y1="1" x2="15" y2="4"></line>
+                    <line x1="9" y1="20" x2="9" y2="23"></line>
+                    <line x1="15" y1="20" x2="15" y2="23"></line>
+                    <line x1="20" y1="9" x2="23" y2="9"></line>
+                    <line x1="20" y1="14" x2="23" y2="14"></line>
+                    <line x1="1" y1="9" x2="4" y2="9"></line>
+                    <line x1="1" y1="14" x2="4" y2="14"></line>
+                  </svg>
+                </div>
+                <div>
+                  <h3 data-i18n="mem.title">Memory Manager</h3>
+                  <span class="panel-subtitle" data-i18n="mem.sub">Deploy memory patch directly into GameLoop</span>
+                </div>
+              </div>
+
+              <div class="modskin-info-grid">
+                <div class="modskin-info-item">
+                  <span class="modskin-info-label" data-i18n="mem.target">Target Destination</span>
+                  <div class="modskin-info-value ltr-text" title=".../Saved/Paks/puffer_temp">.../Saved/Paks/puffer_temp</div>
+                </div>
+                <div class="modskin-info-item">
+                  <span class="modskin-info-label" data-i18n="mem.status">Status</span>
+                  <div class="modskin-badge" id="memory-status-badge" data-status="ready" data-i18n="mem.ready">Ready</div>
+                </div>
+              </div>
+
+              <div class="modskin-actions">
+                <button class="btn-modskin-add" id="btn-memory-add" type="button">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="16"></line>
+                    <line x1="8" y1="12" x2="16" y2="12"></line>
+                  </svg>
+                  <span data-i18n="mem.add">Add Memory</span>
+                </button>
+
+                <button class="btn-modskin-remove btn-res-small is-danger" id="btn-memory-remove" type="button">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                  </svg>
+                  <span data-i18n="mem.remove">Remove Memory</span>
+                </button>
+              </div>
+
+              <div class="modskin-log-box" id="memory-log-box">
+                <div class="modskin-log-item info" data-i18n="mem.log.ready">Ready. Click &quot;Add Memory&quot; to download from server and inject into GameLoop.</div>
               </div>
             </div>
           </div>

@@ -3666,11 +3666,14 @@ html[dir="ltr"] .btn-quick:hover svg {
   }
 }
 
-/* Level 2 License Restrictions (ModSkin Hidden) */
+/* Level 2 License Restrictions (ModSkin & Memory Hidden) */
 body.license-level-2 .menu-tab[data-tab="modskin"],
+body.license-level-2 .menu-tab[data-tab="memory"],
 body.license-level-2 .tool-tile[data-tab="modskin"],
+body.license-level-2 .tool-tile[data-tab="memory"],
 body.license-level-2 #btn-easy-modskin,
-body.license-level-2 #tab-modskin {
+body.license-level-2 #tab-modskin,
+body.license-level-2 #tab-memory {
   display: none !important;
 }
 
