@@ -3672,6 +3672,7 @@ body.license-level-2 .menu-tab[data-tab="memory"],
 body.license-level-2 .tool-tile[data-tab="modskin"],
 body.license-level-2 .tool-tile[data-tab="memory"],
 body.license-level-2 #btn-easy-modskin,
+body.license-level-2 #btn-easy-memory,
 body.license-level-2 #tab-modskin,
 body.license-level-2 #tab-memory {
   display: none !important;

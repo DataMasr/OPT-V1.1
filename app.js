@@ -580,6 +580,12 @@ function applyLicenseLevelPermissions() {
     easyModskinBtn.hidden = isL2;
   }
 
+  const easyMemoryBtn = document.getElementById('btn-easy-memory');
+  if (easyMemoryBtn) {
+    easyMemoryBtn.style.display = isL2 ? 'none' : '';
+    easyMemoryBtn.hidden = isL2;
+  }
+
   if (isL2 && currentTab === 'modskin') {
     switchTab('home', true);
     showToast(t('auth.err.level2Modskin'), 'error');
@@ -2143,6 +2149,16 @@ function handleMemoryStatus(msg) {
 
   appendStatusLog('memory-log-box', 'modskin-log-item', msg.status, msg.message);
 
+  if (EasyActionModal.currentOp === 'memory') {
+    if (msg.status === 'busy') {
+      EasyActionModal.updateMessage(msg.message);
+    } else if (msg.status === 'success') {
+      EasyActionModal.complete(true, msg.message || t('mem.toast.ok'));
+    } else if (msg.status === 'error') {
+      EasyActionModal.complete(false, msg.message || t('mem.toast.err'));
+    }
+  }
+
   if (msg.status === 'success') {
     showToast(msg.message || t('mem.toast.ok'), 'success');
   } else if (msg.status === 'removed') {
@@ -3391,6 +3407,25 @@ document.addEventListener('DOMContentLoaded', () => {
       '<path d="M12 2L2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"></path>'
     );
     sendAction('modskin_add');
+  });
+
+  document.getElementById('btn-easy-memory')?.addEventListener('click', () => {
+    if (isLevel2License()) {
+      showToast(t('auth.err.level2Memory'), 'error');
+      return;
+    }
+    SoundEngine.playClick();
+    MemoryState.status = 'busy';
+    MemoryState.busyKey = 'mem.injectingBadge';
+    MemoryState.op = 'add';
+    renderMemory();
+    EasyActionModal.open(
+      'memory',
+      t('easy.modal.memoryTitle'),
+      t('easy.modal.memoryDesc'),
+      '<rect x="4" y="4" width="16" height="16" rx="2"></rect><rect x="9" y="9" width="6" height="6"></rect><line x1="9" y1="1" x2="9" y2="4"></line><line x1="15" y1="1" x2="15" y2="4"></line><line x1="9" y1="20" x2="9" y2="23"></line><line x1="15" y1="20" x2="15" y2="23"></line><line x1="20" y1="9" x2="23" y2="9"></line><line x1="20" y1="14" x2="23" y2="14"></line><line x1="1" y1="9" x2="4" y2="9"></line><line x1="1" y1="14" x2="4" y2="14"></line>'
+    );
+    sendAction('memory_add');
   });
 
   // Action Loading Modal Close handlers
