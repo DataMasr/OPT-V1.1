@@ -781,8 +781,8 @@ function renderBridge() {
 
   const btnResetGuest = document.getElementById('btn-reset-guest');
   if (btnResetGuest) {
-    btnResetGuest.disabled = state !== 'connected';
-    btnResetGuest.title = state === 'connected' ? '' : t('bridge.connectFirst');
+    btnResetGuest.disabled = false;
+    btnResetGuest.title = '';
   }
 
   renderBoost();
@@ -1295,7 +1295,7 @@ function handleNativeMessage(data) {
         EasyActionModal.complete(isSuccess, msg.message || (isSuccess ? t('common.done') : 'Failed'));
         const btn = document.getElementById('btn-reset-guest');
         if (btn) {
-          btn.disabled = Bridge.state !== 'connected';
+          btn.disabled = false;
           btn.classList.remove('is-busy');
         }
         const btnEasy = document.getElementById('btn-easy-reset-guest');
@@ -2890,10 +2890,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnResetGuest = document.getElementById('btn-reset-guest');
   if (btnResetGuest) {
     btnResetGuest.addEventListener('click', () => {
-      if (Bridge.state !== 'connected') {
-        showToast(t('bridge.connectFirst'), 'error');
-        return;
-      }
       SoundEngine.playClick();
       appendGfxLog("GUEST", "Resetting guest account for Global (com.tencent.ig)...");
       btnResetGuest.disabled = true;
@@ -3359,11 +3355,6 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   document.getElementById('btn-easy-reset-guest')?.addEventListener('click', () => {
-    if (Bridge.state !== 'connected') {
-      showToast(t('bridge.connectFirst'), 'error');
-      autoConnectGameLoop();
-      return;
-    }
     SoundEngine.playClick();
     const btn = document.getElementById('btn-easy-reset-guest');
     if (btn) btn.classList.add('is-busy');
